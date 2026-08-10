@@ -27,6 +27,8 @@ model User {
   email        String   @unique
   passwordHash String
   isActive     Boolean  @default(true)
+  salesCreated Sale[]   @relation("SaleCreatedBy")
+  ordersCreated Order[] @relation("OrderCreatedBy")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -61,6 +63,8 @@ model Sale {
   id            Int           @id @default(autoincrement())
   branchId      Int
   branch        Branch        @relation(fields: [branchId], references: [id])
+  createdByUserId Int?
+  createdBy       User?       @relation("SaleCreatedBy", fields: [createdByUserId], references: [id])
   customer      String        @default("Consumidor final")
   amount        Float
   paymentMethod PaymentMethod
@@ -71,6 +75,7 @@ model Sale {
   updatedAt     DateTime      @updatedAt
 
   @@index([branchId])
+  @@index([createdByUserId])
   @@index([paymentMethod])
   @@index([createdAt])
 }
@@ -94,6 +99,8 @@ model Order {
   id        Int         @id @default(autoincrement())
   branchId  Int
   branch    Branch      @relation(fields: [branchId], references: [id])
+  createdByUserId Int?
+  createdBy       User?       @relation("OrderCreatedBy", fields: [createdByUserId], references: [id])
   customer  String
   detail    String
   amount    Float
@@ -104,6 +111,7 @@ model Order {
   updatedAt DateTime    @updatedAt
 
   @@index([branchId])
+  @@index([createdByUserId])
   @@index([status])
   @@index([dueDate])
 }

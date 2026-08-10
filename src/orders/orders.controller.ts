@@ -1,4 +1,6 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query, Req } from '@nestjs/common';
+import { Request } from 'express';
+import { RequestUser } from '../common/types/request-user';
 import { ConvertOrderToSaleDto } from './dto/convert-order-to-sale.dto';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { QueryOrdersDto } from './dto/query-orders.dto';
@@ -15,8 +17,8 @@ export class OrdersController {
   }
 
   @Post()
-  create(@Body() dto: CreateOrderDto) {
-    return this.ordersService.create(dto);
+  create(@Body() dto: CreateOrderDto, @Req() request: Request & { user: RequestUser }) {
+    return this.ordersService.create(dto, request.user.id);
   }
 
   @Get(':id')
@@ -35,7 +37,11 @@ export class OrdersController {
   }
 
   @Post(':id/convert-to-sale')
-  convertToSale(@Param('id', ParseIntPipe) id: number, @Body() dto: ConvertOrderToSaleDto) {
-    return this.ordersService.convertToSale(id, dto);
+  convertToSale(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ConvertOrderToSaleDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.ordersService.convertToSale(id, dto, request.user.id);
   }
 }

@@ -14,7 +14,7 @@ export class SalesService {
     private readonly branchesService: BranchesService,
   ) {}
 
-  async create(dto: CreateSaleDto) {
+  async create(dto: CreateSaleDto, createdByUserId?: number) {
     await this.branchesService.ensureExists(dto.branchId);
     const paymentMethod = toPrismaPaymentMethod(dto.paymentMethod);
 
@@ -45,6 +45,7 @@ export class SalesService {
       const sale = await tx.sale.create({
         data: {
           branchId: dto.branchId,
+          createdByUserId,
           customer: dto.customer?.trim() || 'Consumidor final',
           amount: dto.amount,
           paymentMethod,
@@ -62,7 +63,7 @@ export class SalesService {
             }),
           },
         },
-        include: { items: true, branch: true },
+        include: { items: true, branch: true, createdBy: { select: { id: true, name: true, email: true } } },
       });
 
       for (const item of dto.items) {
@@ -88,7 +89,12 @@ export class SalesService {
     };
     const sales = await this.prisma.sale.findMany({
       where,
-      include: { items: true, branch: true, sourceOrder: true },
+      include: {
+        items: true,
+        branch: true,
+        sourceOrder: true,
+        createdBy: { select: { id: true, name: true, email: true } },
+      },
       orderBy: { createdAt: 'desc' },
     });
     return sales.map((sale) => this.serializeSale(sale));
@@ -97,7 +103,12 @@ export class SalesService {
   async findOne(id: number) {
     const sale = await this.prisma.sale.findUnique({
       where: { id },
-      include: { items: true, branch: true, sourceOrder: true },
+      include: {
+        items: true,
+        branch: true,
+        sourceOrder: true,
+        createdBy: { select: { id: true, name: true, email: true } },
+      },
     });
     if (!sale) throw new NotFoundException('Venta no encontrada');
     return this.serializeSale(sale);
