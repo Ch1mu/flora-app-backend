@@ -24,9 +24,15 @@ export class StockService {
   async findAll(query: QueryStockDto) {
     const where: Prisma.StockItemWhereInput = {
       ...(query.branchId ? { branchId: query.branchId } : {}),
-      ...(query.search ? { name: { contains: query.search, mode: 'insensitive' } } : {}),
     };
     const { page, limit, skip, take } = getPagination(query);
+    if (query.search) {
+      const searchTokens = tokenizeSearch(query.search);
+      const items = await this.prisma.stockItem.findMany({ where, orderBy: { name: 'asc' } });
+      const data = items.filter((item) => matchesSearchTokens(item.name, searchTokens));
+      return buildPaginatedResponse(data.slice(skip, skip + take), data.length, page, limit);
+    }
+
     const [data, total] = await this.prisma.$transaction([
       this.prisma.stockItem.findMany({ where, orderBy: { name: 'asc' }, skip, take }),
       this.prisma.stockItem.count({ where }),
@@ -198,4 +204,26 @@ function buildImportKey(name: string, category: string) {
 
 function normalizeImportValue(value: string) {
   return value.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function matchesSearchTokens(value: string, tokens: string[]) {
+  const normalized = normalizeSearchValue(value);
+  return tokens.every((token) => normalized.includes(token));
+}
+
+function tokenizeSearch(value: string) {
+  return normalizeSearchValue(value)
+    .split(' ')
+    .map((token) => token.trim())
+    .filter(Boolean);
+}
+
+function normalizeSearchValue(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
