@@ -73,10 +73,10 @@ export class OrdersService {
       {
         branchId: order.branchId,
         customer: dto.customer || order.customer,
-        amount: order.amount,
+        amount: dto.amount ?? order.amount,
         paymentMethod: dto.paymentMethod,
         sourceOrderId: order.id,
-        items: [],
+        items: dto.items ?? [],
       },
       createdByUserId,
     );
