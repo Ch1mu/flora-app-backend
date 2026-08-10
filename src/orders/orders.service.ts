@@ -26,8 +26,10 @@ export class OrdersService {
           branchId: dto.branchId,
           createdByUserId,
           customer: dto.customer,
+          phone: dto.phone,
           detail: dto.detail,
           amount: dto.amount,
+          deposit: dto.deposit,
           dueDate: new Date(dto.dueDate),
         },
       });
@@ -96,8 +98,10 @@ export class OrdersService {
         data: {
           branchId: dto.branchId,
           customer: dto.customer,
+          phone: dto.phone,
           detail: dto.detail,
           amount: dto.amount,
+          deposit: dto.deposit,
           dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
           status: dto.status,
         },
