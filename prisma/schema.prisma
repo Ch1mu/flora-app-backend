@@ -1,0 +1,109 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PaymentMethod {
+  Efectivo
+  Debito
+  Credito
+  Transferencia
+  Mercado_Pago
+}
+
+enum OrderStatus {
+  PENDING
+  SOLD
+  CANCELLED
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  name         String
+  email        String   @unique
+  passwordHash String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Branch {
+  id         Int         @id @default(autoincrement())
+  name       String      @unique
+  stockItems StockItem[]
+  sales      Sale[]
+  orders     Order[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+}
+
+model StockItem {
+  id        Int        @id @default(autoincrement())
+  name      String
+  category  String
+  branchId  Int
+  branch    Branch     @relation(fields: [branchId], references: [id])
+  units     Int
+  price     Float
+  saleItems SaleItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@index([branchId])
+  @@index([name])
+}
+
+model Sale {
+  id            Int           @id @default(autoincrement())
+  branchId      Int
+  branch        Branch        @relation(fields: [branchId], references: [id])
+  customer      String        @default("Consumidor final")
+  amount        Float
+  paymentMethod PaymentMethod
+  items         SaleItem[]
+  sourceOrderId Int?          @unique
+  sourceOrder   Order?        @relation(fields: [sourceOrderId], references: [id])
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([branchId])
+  @@index([paymentMethod])
+  @@index([createdAt])
+}
+
+model SaleItem {
+  id          Int       @id @default(autoincrement())
+  saleId      Int
+  sale        Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  stockItemId Int
+  stockItem   StockItem @relation(fields: [stockItemId], references: [id])
+  name        String
+  units       Int
+  unitPrice   Float
+  subtotal    Float
+
+  @@index([saleId])
+  @@index([stockItemId])
+}
+
+model Order {
+  id        Int         @id @default(autoincrement())
+  branchId  Int
+  branch    Branch      @relation(fields: [branchId], references: [id])
+  customer  String
+  detail    String
+  amount    Float
+  dueDate   DateTime
+  status    OrderStatus @default(PENDING)
+  sale      Sale?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([branchId])
+  @@index([status])
+  @@index([dueDate])
+}
