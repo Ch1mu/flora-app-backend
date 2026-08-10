@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query } from '@nestjs/common';
 import { CreateStockItemDto } from './dto/create-stock-item.dto';
 import { QueryStockDto } from './dto/query-stock.dto';
 import { UpdateStockItemDto } from './dto/update-stock-item.dto';
@@ -32,5 +32,10 @@ export class StockController {
   @Patch(':id/units')
   updateUnits(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateStockUnitsDto) {
     return this.stockService.updateUnits(id, dto);
+  }
+
+  @Delete(':id')
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.stockService.remove(id);
   }
 }

@@ -66,6 +66,14 @@ export class OrdersService {
     });
   }
 
+  async remove(id: number) {
+    const order = await this.findOne(id);
+    if (order.status === OrderStatus.SOLD || order.sale) {
+      throw new BadRequestException('No se puede eliminar un pedido vendido');
+    }
+    return this.prisma.order.delete({ where: { id } });
+  }
+
   async convertToSale(id: number, dto: ConvertOrderToSaleDto, createdByUserId?: number) {
     const order = await this.findOne(id);
     if (order.status !== OrderStatus.PENDING) throw new BadRequestException('Solo se pueden vender pedidos pendientes');

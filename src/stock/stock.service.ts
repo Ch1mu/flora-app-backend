@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { BranchesService } from '../branches/branches.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -42,5 +42,14 @@ export class StockService {
   async updateUnits(id: number, dto: UpdateStockUnitsDto) {
     await this.findOne(id);
     return this.prisma.stockItem.update({ where: { id }, data: { units: dto.units } });
+  }
+
+  async remove(id: number) {
+    await this.findOne(id);
+    const saleItems = await this.prisma.saleItem.count({ where: { stockItemId: id } });
+    if (saleItems > 0) {
+      throw new BadRequestException('No se puede eliminar un producto que ya fue usado en ventas');
+    }
+    return this.prisma.stockItem.delete({ where: { id } });
   }
 }

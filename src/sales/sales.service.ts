@@ -6,6 +6,7 @@ import { fromPrismaPaymentMethod, toPrismaPaymentMethod } from '../common/paymen
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { QuerySalesDto } from './dto/query-sales.dto';
+import { UpdateSaleDto } from './dto/update-sale.dto';
 
 @Injectable()
 export class SalesService {
@@ -112,6 +113,105 @@ export class SalesService {
     });
     if (!sale) throw new NotFoundException('Venta no encontrada');
     return this.serializeSale(sale);
+  }
+
+  async update(id: number, dto: UpdateSaleDto) {
+    return this.prisma.$transaction(async (tx) => {
+      const sale = await tx.sale.findUnique({ where: { id }, include: { items: true } });
+      if (!sale) throw new NotFoundException('Venta no encontrada');
+
+      const targetBranchId = dto.branchId ?? sale.branchId;
+      if (dto.branchId) await this.branchesService.ensureExists(dto.branchId);
+      if (dto.branchId && dto.branchId !== sale.branchId && sale.sourceOrderId) {
+        throw new BadRequestException('No se puede cambiar la sucursal de una venta asociada a un pedido');
+      }
+      if (dto.branchId && dto.branchId !== sale.branchId && dto.items === undefined && sale.items.length > 0) {
+        throw new BadRequestException('Para cambiar la sucursal de una venta con items, envie tambien los items');
+      }
+
+      if (dto.items !== undefined) {
+        for (const item of sale.items) {
+          await tx.stockItem.update({
+            where: { id: item.stockItemId },
+            data: { units: { increment: item.units } },
+          });
+        }
+
+        const stockIds = dto.items.map((item) => item.stockItemId);
+        const stockItems = stockIds.length
+          ? await tx.stockItem.findMany({ where: { id: { in: stockIds } } })
+          : [];
+
+        for (const item of dto.items) {
+          const stockItem = stockItems.find((stock) => stock.id === item.stockItemId);
+          if (!stockItem) throw new NotFoundException(`Producto de stock ${item.stockItemId} no encontrado`);
+          if (stockItem.branchId !== targetBranchId) {
+            throw new BadRequestException(`El producto ${stockItem.name} pertenece a otra sucursal`);
+          }
+          if (stockItem.units < item.units) {
+            throw new BadRequestException(`Stock insuficiente para ${stockItem.name}`);
+          }
+        }
+
+        await tx.saleItem.deleteMany({ where: { saleId: id } });
+
+        for (const item of dto.items) {
+          const stockItem = stockItems.find((stock) => stock.id === item.stockItemId)!;
+          await tx.saleItem.create({
+            data: {
+              saleId: id,
+              stockItemId: stockItem.id,
+              name: stockItem.name,
+              units: item.units,
+              unitPrice: stockItem.price,
+              subtotal: stockItem.price * item.units,
+            },
+          });
+          await tx.stockItem.update({
+            where: { id: item.stockItemId },
+            data: { units: { decrement: item.units } },
+          });
+        }
+      }
+
+      const updated = await tx.sale.update({
+        where: { id },
+        data: {
+          branchId: targetBranchId,
+          customer: dto.customer !== undefined ? dto.customer.trim() || 'Consumidor final' : undefined,
+          amount: dto.amount,
+          paymentMethod: dto.paymentMethod ? toPrismaPaymentMethod(dto.paymentMethod) : undefined,
+        },
+        include: {
+          items: true,
+          branch: true,
+          sourceOrder: true,
+          createdBy: { select: { id: true, name: true, email: true } },
+        },
+      });
+
+      return this.serializeSale(updated);
+    });
+  }
+
+  async remove(id: number) {
+    return this.prisma.$transaction(async (tx) => {
+      const sale = await tx.sale.findUnique({ where: { id }, include: { items: true } });
+      if (!sale) throw new NotFoundException('Venta no encontrada');
+
+      for (const item of sale.items) {
+        await tx.stockItem.update({
+          where: { id: item.stockItemId },
+          data: { units: { increment: item.units } },
+        });
+      }
+
+      if (sale.sourceOrderId) {
+        await tx.order.update({ where: { id: sale.sourceOrderId }, data: { status: OrderStatus.PENDING } });
+      }
+
+      return tx.sale.delete({ where: { id } });
+    });
   }
 
   private serializeSale<T extends { paymentMethod: any }>(sale: T) {

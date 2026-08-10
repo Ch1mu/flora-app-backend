@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, Req } from '@nestjs/common';
 import { Request } from 'express';
 import { RequestUser } from '../common/types/request-user';
 import { ConvertOrderToSaleDto } from './dto/convert-order-to-sale.dto';
@@ -34,6 +34,11 @@ export class OrdersController {
   @Patch(':id/cancel')
   cancel(@Param('id', ParseIntPipe) id: number) {
     return this.ordersService.cancel(id);
+  }
+
+  @Delete(':id')
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.ordersService.remove(id);
   }
 
   @Post(':id/convert-to-sale')
