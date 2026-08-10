@@ -16,7 +16,7 @@ export class SalesService {
     private readonly branchesService: BranchesService,
   ) {}
 
-  async create(dto: CreateSaleDto, createdByUserId?: number) {
+  async create(dto: CreateSaleDto, createdByUserId?: number, options?: { skipStockDecrement?: boolean }) {
     await this.branchesService.ensureExists(dto.branchId);
     const paymentMethod = toPrismaPaymentMethod(dto.paymentMethod);
 
@@ -39,7 +39,7 @@ export class SalesService {
         if (stockItem.branchId !== dto.branchId) {
           throw new BadRequestException(`El producto ${stockItem.name} pertenece a otra sucursal`);
         }
-        if (stockItem.units < item.units) {
+        if (!options?.skipStockDecrement && stockItem.units < item.units) {
           throw new BadRequestException(`Stock insuficiente para ${stockItem.name}`);
         }
       }
@@ -68,11 +68,13 @@ export class SalesService {
         include: { items: true, branch: true, createdBy: { select: { id: true, name: true, email: true } } },
       });
 
-      for (const item of dto.items) {
-        await tx.stockItem.update({
-          where: { id: item.stockItemId },
-          data: { units: { decrement: item.units } },
-        });
+      if (!options?.skipStockDecrement) {
+        for (const item of dto.items) {
+          await tx.stockItem.update({
+            where: { id: item.stockItemId },
+            data: { units: { decrement: item.units } },
+          });
+        }
       }
 
       if (dto.sourceOrderId) {
@@ -141,6 +143,9 @@ export class SalesService {
       if (dto.branchId && dto.branchId !== sale.branchId && sale.sourceOrderId) {
         throw new BadRequestException('No se puede cambiar la sucursal de una venta asociada a un pedido');
       }
+      if (sale.sourceOrderId && dto.items !== undefined) {
+        throw new BadRequestException('No se pueden editar items de una venta asociada a un pedido');
+      }
       if (dto.branchId && dto.branchId !== sale.branchId && dto.items === undefined && sale.items.length > 0) {
         throw new BadRequestException('Para cambiar la sucursal de una venta con items, envie tambien los items');
       }
@@ -206,6 +211,10 @@ export class SalesService {
         },
       });
 
+      if (sale.sourceOrderId && dto.amount !== undefined) {
+        await tx.order.update({ where: { id: sale.sourceOrderId }, data: { amount: dto.amount } });
+      }
+
       return this.serializeSale(updated);
     });
   }
@@ -215,15 +224,15 @@ export class SalesService {
       const sale = await tx.sale.findUnique({ where: { id }, include: { items: true } });
       if (!sale) throw new NotFoundException('Venta no encontrada');
 
-      for (const item of sale.items) {
-        await tx.stockItem.update({
-          where: { id: item.stockItemId },
-          data: { units: { increment: item.units } },
-        });
-      }
-
       if (sale.sourceOrderId) {
         await tx.order.update({ where: { id: sale.sourceOrderId }, data: { status: OrderStatus.PENDING } });
+      } else {
+        for (const item of sale.items) {
+          await tx.stockItem.update({
+            where: { id: item.stockItemId },
+            data: { units: { increment: item.units } },
+          });
+        }
       }
 
       return tx.sale.delete({ where: { id } });

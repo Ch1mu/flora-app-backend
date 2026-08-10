@@ -52,6 +52,7 @@ model StockItem {
   units     Int
   price     Float
   saleItems SaleItem[]
+  orderItems OrderItem[]
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 
@@ -106,6 +107,7 @@ model Order {
   amount    Float
   dueDate   DateTime
   status    OrderStatus @default(PENDING)
+  items     OrderItem[]
   sale      Sale?
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
@@ -114,4 +116,19 @@ model Order {
   @@index([createdByUserId])
   @@index([status])
   @@index([dueDate])
+}
+
+model OrderItem {
+  id          Int       @id @default(autoincrement())
+  orderId     Int
+  order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  stockItemId Int
+  stockItem   StockItem @relation(fields: [stockItemId], references: [id])
+  name        String
+  units       Int
+  unitPrice   Float
+  subtotal    Float
+
+  @@index([orderId])
+  @@index([stockItemId])
 }

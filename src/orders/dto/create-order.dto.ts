@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
-import { IsDateString, IsInt, IsNumber, IsString, Min } from 'class-validator';
+import { IsArray, IsDateString, IsInt, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { CreateOrderItemDto } from './create-order-item.dto';
 
 export class CreateOrderDto {
   @Type(() => Number)
@@ -20,4 +21,10 @@ export class CreateOrderDto {
 
   @IsDateString()
   dueDate: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateOrderItemDto)
+  items?: CreateOrderItemDto[];
 }

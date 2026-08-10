@@ -56,6 +56,10 @@ export class StockService {
     if (saleItems > 0) {
       throw new BadRequestException('No se puede eliminar un producto que ya fue usado en ventas');
     }
+    const orderItems = await this.prisma.orderItem.count({ where: { stockItemId: id } });
+    if (orderItems > 0) {
+      throw new BadRequestException('No se puede eliminar un producto que esta usado en pedidos');
+    }
     return this.prisma.stockItem.delete({ where: { id } });
   }
 }
