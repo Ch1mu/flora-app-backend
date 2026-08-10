@@ -75,7 +75,10 @@ export class SalesService {
       }
 
       if (dto.sourceOrderId) {
-        await tx.order.update({ where: { id: dto.sourceOrderId }, data: { status: OrderStatus.SOLD } });
+        await tx.order.update({
+          where: { id: dto.sourceOrderId },
+          data: { status: OrderStatus.SOLD, amount: dto.amount },
+        });
       }
 
       return this.serializeSale(sale);
