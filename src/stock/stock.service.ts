@@ -4,6 +4,7 @@ import { BranchesService } from '../branches/branches.service';
 import { buildPaginatedResponse, getPagination } from '../common/utils/pagination';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateStockItemDto } from './dto/create-stock-item.dto';
+import { ImportStockPdfDto } from './dto/import-stock-pdf.dto';
 import { QueryStockDto } from './dto/query-stock.dto';
 import { UpdateStockItemDto } from './dto/update-stock-item.dto';
 import { UpdateStockUnitsDto } from './dto/update-stock-units.dto';
@@ -22,7 +23,7 @@ export class StockService {
 
   async findAll(query: QueryStockDto) {
     const where: Prisma.StockItemWhereInput = {
-      branchId: query.branchId,
+      ...(query.branchId ? { branchId: query.branchId } : {}),
       ...(query.search ? { name: { contains: query.search, mode: 'insensitive' } } : {}),
     };
     const { page, limit, skip, take } = getPagination(query);
@@ -62,4 +63,96 @@ export class StockService {
     }
     return this.prisma.stockItem.delete({ where: { id } });
   }
+
+  async importPdf(file: Express.Multer.File | undefined, dto: ImportStockPdfDto) {
+    if (!file) throw new BadRequestException('Debe enviar un archivo PDF en el campo file');
+    if (file.mimetype !== 'application/pdf') throw new BadRequestException('El archivo debe ser PDF');
+
+    await this.branchesService.ensureExists(dto.branchId);
+    const rows = await this.extractStockRowsFromPdf(file.buffer);
+    if (rows.length === 0) throw new BadRequestException('No se encontraron productos para importar');
+
+    const data = rows.map((row) => ({
+      branchId: dto.branchId,
+      name: row.name,
+      category: row.category,
+      units: 0,
+      price: roundMoney((row.sourcePrice / 2) * 2.3),
+    }));
+
+    for (let index = 0; index < data.length; index += 500) {
+      await this.prisma.stockItem.createMany({ data: data.slice(index, index + 500) });
+    }
+
+    return {
+      imported: data.length,
+      branchId: dto.branchId,
+      priceFormula: 'sourcePrice / 2 * 2.3',
+    };
+  }
+
+  private async extractStockRowsFromPdf(buffer: Buffer) {
+    const importPdfjs = new Function('specifier', 'return import(specifier)') as (specifier: string) => Promise<any>;
+    const pdfjs = await importPdfjs('pdfjs-dist/legacy/build/pdf.mjs');
+    const pdf = await pdfjs.getDocument({ data: new Uint8Array(buffer), disableFontFace: true }).promise;
+    const rows: Array<{ category: string; name: string; sourcePrice: number }> = [];
+
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+      const page = await pdf.getPage(pageNumber);
+      const content = await page.getTextContent();
+      const lines = groupPdfItemsByLine(content.items);
+
+      for (const line of lines) {
+        const category = line
+          .filter((item) => item.x < 180)
+          .map((item) => item.text)
+          .join(' ')
+          .trim();
+        const name = line
+          .filter((item) => item.x >= 180 && item.x < 450)
+          .map((item) => item.text)
+          .join(' ')
+          .trim();
+        const priceText = line
+          .filter((item) => item.x >= 450)
+          .map((item) => item.text)
+          .join('')
+          .replace('$', '')
+          .trim();
+        const sourcePrice = parseArgentinePrice(priceText);
+
+        if (!category || !name || sourcePrice === null) continue;
+        if (category === 'NOM_GRU' || name === 'DESCRIP') continue;
+        rows.push({ category, name, sourcePrice });
+      }
+    }
+
+    return rows;
+  }
+}
+
+type PdfLineItem = { x: number; y: number; text: string };
+
+function groupPdfItemsByLine(items: any[]) {
+  const grouped = new Map<number, PdfLineItem[]>();
+  for (const item of items) {
+    const text = String(item.str ?? '').trim();
+    if (!text) continue;
+    const y = Math.round(Number(item.transform?.[5] ?? 0) / 2) * 2;
+    const line = grouped.get(y) ?? [];
+    line.push({ x: Number(item.transform?.[4] ?? 0), y, text });
+    grouped.set(y, line);
+  }
+  return [...grouped.values()].map((line) => line.sort((a, b) => a.x - b.x));
+}
+
+function parseArgentinePrice(value: string) {
+  const normalized = value.replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
+  if (!/^\d+(\.\d+)?$/.test(normalized)) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function roundMoney(value: number) {
+  return Math.round(value * 100) / 100;
 }

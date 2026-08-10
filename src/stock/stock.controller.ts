@@ -1,5 +1,7 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { CreateStockItemDto } from './dto/create-stock-item.dto';
+import { ImportStockPdfDto } from './dto/import-stock-pdf.dto';
 import { QueryStockDto } from './dto/query-stock.dto';
 import { UpdateStockItemDto } from './dto/update-stock-item.dto';
 import { UpdateStockUnitsDto } from './dto/update-stock-units.dto';
@@ -17,6 +19,12 @@ export class StockController {
   @Post()
   create(@Body() dto: CreateStockItemDto) {
     return this.stockService.create(dto);
+  }
+
+  @Post('import-pdf')
+  @UseInterceptors(FileInterceptor('file'))
+  importPdf(@UploadedFile() file: Express.Multer.File, @Body() dto: ImportStockPdfDto) {
+    return this.stockService.importPdf(file, dto);
   }
 
   @Get(':id')
