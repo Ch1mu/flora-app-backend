@@ -13,6 +13,11 @@ enum PaymentMethod {
   Credito
   Transferencia
   Mercado_Pago
+  Debito_Flora
+  Debito_Diego
+  Transf_Flora
+  Transf_Diego
+  Transf_Florencia
 }
 
 enum OrderStatus {
@@ -105,8 +110,10 @@ model Order {
   createdByUserId Int?
   createdBy       User?       @relation("OrderCreatedBy", fields: [createdByUserId], references: [id])
   customer  String
+  phone     String?
   detail    String
   amount    Float
+  deposit   Float?
   dueDate   DateTime
   status    OrderStatus @default(PENDING)
   items     OrderItem[]

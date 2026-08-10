@@ -147,9 +147,10 @@ Authorization: Bearer <accessToken>
 La API acepta:
 
 - `Efectivo`
-- `Debito`
-- `Credito`
-- `Transferencia`
-- `Mercado Pago`
+- `Debito Flora`
+- `Debito Diego`
+- `Transf. Flora`
+- `Transf. Diego`
+- `Transf. Florencia`
 
-Internamente Prisma guarda `Mercado Pago` como `Mercado_Pago` por restriccion de nombres de enum.
+Ventas historicas pueden devolver medios anteriores si fueron registradas antes del cambio.

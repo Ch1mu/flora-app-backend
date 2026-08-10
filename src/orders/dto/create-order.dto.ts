@@ -11,6 +11,10 @@ export class CreateOrderDto {
   @IsString()
   customer: string;
 
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
   @IsString()
   detail: string;
 
@@ -18,6 +22,12 @@ export class CreateOrderDto {
   @IsNumber()
   @Min(0)
   amount: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  deposit?: number;
 
   @IsDateString()
   dueDate: string;
