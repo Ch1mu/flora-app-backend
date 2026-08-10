@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "description": "Backend NestJS para administracion de floreria",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"prisma/**/*.ts\"",
@@ -14,7 +17,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:seed": "prisma db seed",
-    "render:build": "npm ci && npx prisma generate && npm run build"
+    "render:build": "npm ci --include=dev && npx prisma generate && npm run build"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",
