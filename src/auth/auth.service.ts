@@ -2,7 +2,6 @@ import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/c
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
-import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
 
 @Injectable()
@@ -28,15 +27,4 @@ export class AuthService {
     };
   }
 
-  async changePassword(userId: number, dto: ChangePasswordDto) {
-    const user = await this.usersService.findByIdWithPassword(userId);
-    if (!user || !(await bcrypt.compare(dto.currentPassword, user.passwordHash))) {
-      throw new UnauthorizedException('Password actual invalida');
-    }
-    if (!user.isActive) {
-      throw new ForbiddenException('Usuario inactivo');
-    }
-
-    return this.usersService.updatePassword(user.id, await bcrypt.hash(dto.newPassword, 10));
-  }
 }
