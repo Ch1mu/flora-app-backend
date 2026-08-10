@@ -72,20 +72,47 @@ export class StockService {
     const rows = await this.extractStockRowsFromPdf(file.buffer);
     if (rows.length === 0) throw new BadRequestException('No se encontraron productos para importar');
 
-    const data = rows.map((row) => ({
-      branchId: dto.branchId,
-      name: row.name,
-      category: row.category,
-      units: 0,
-      price: roundMoney((row.sourcePrice / 2) * 2.3),
-    }));
+    const dedupedRows = dedupeImportRows(rows);
+    const existingItems = await this.prisma.stockItem.findMany({
+      where: { branchId: dto.branchId },
+    });
+    const existingByKey = new Map(existingItems.map((item) => [buildImportKey(item.name, item.category), item]));
+    let created = 0;
+    let updated = 0;
 
-    for (let index = 0; index < data.length; index += 500) {
-      await this.prisma.stockItem.createMany({ data: data.slice(index, index + 500) });
+    for (let index = 0; index < dedupedRows.length; index += 100) {
+      const batch = dedupedRows.slice(index, index + 100);
+      await this.prisma.$transaction(
+        batch.map((row) => {
+          const price = roundMoney((row.sourcePrice / 2) * 2.3);
+          const existing = existingByKey.get(buildImportKey(row.name, row.category));
+
+          if (existing) {
+            updated++;
+            return this.prisma.stockItem.update({
+              where: { id: existing.id },
+              data: { price },
+            });
+          }
+
+          created++;
+          return this.prisma.stockItem.create({
+            data: {
+              branchId: dto.branchId,
+              name: row.name,
+              category: row.category,
+              units: 0,
+              price,
+            },
+          });
+        }),
+      );
     }
 
     return {
-      imported: data.length,
+      imported: dedupedRows.length,
+      created,
+      updated,
       branchId: dto.branchId,
       priceFormula: 'sourcePrice / 2 * 2.3',
     };
@@ -155,4 +182,20 @@ function parseArgentinePrice(value: string) {
 
 function roundMoney(value: number) {
   return Math.round(value * 100) / 100;
+}
+
+function dedupeImportRows(rows: Array<{ category: string; name: string; sourcePrice: number }>) {
+  const deduped = new Map<string, { category: string; name: string; sourcePrice: number }>();
+  for (const row of rows) {
+    deduped.set(buildImportKey(row.name, row.category), row);
+  }
+  return [...deduped.values()];
+}
+
+function buildImportKey(name: string, category: string) {
+  return `${normalizeImportValue(category)}::${normalizeImportValue(name)}`;
+}
+
+function normalizeImportValue(value: string) {
+  return value.trim().replace(/\s+/g, ' ').toLowerCase();
 }
