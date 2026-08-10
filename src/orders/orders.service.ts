@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { OrderStatus, Prisma } from '@prisma/client';
 import { BranchesService } from '../branches/branches.service';
+import { buildPaginatedResponse, getPagination } from '../common/utils/pagination';
 import { PrismaService } from '../prisma/prisma.service';
 import { SalesService } from '../sales/sales.service';
 import { ConvertOrderToSaleDto } from './dto/convert-order-to-sale.dto';
@@ -24,16 +25,23 @@ export class OrdersService {
     });
   }
 
-  findAll(query: QueryOrdersDto) {
+  async findAll(query: QueryOrdersDto) {
     const where: Prisma.OrderWhereInput = {
       ...(query.branchId ? { branchId: query.branchId } : {}),
       ...(query.status ? { status: query.status } : {}),
     };
-    return this.prisma.order.findMany({
-      where,
-      include: { branch: true, sale: true, createdBy: { select: { id: true, name: true, email: true } } },
-      orderBy: { dueDate: 'asc' },
-    });
+    const { page, limit, skip, take } = getPagination(query);
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.order.findMany({
+        where,
+        include: { branch: true, sale: true, createdBy: { select: { id: true, name: true, email: true } } },
+        orderBy: { dueDate: 'asc' },
+        skip,
+        take,
+      }),
+      this.prisma.order.count({ where }),
+    ]);
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   async findOne(id: number) {

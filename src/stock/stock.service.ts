@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { BranchesService } from '../branches/branches.service';
+import { buildPaginatedResponse, getPagination } from '../common/utils/pagination';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateStockItemDto } from './dto/create-stock-item.dto';
 import { QueryStockDto } from './dto/query-stock.dto';
@@ -19,12 +20,17 @@ export class StockService {
     return this.prisma.stockItem.create({ data: dto });
   }
 
-  findAll(query: QueryStockDto) {
+  async findAll(query: QueryStockDto) {
     const where: Prisma.StockItemWhereInput = {
       branchId: query.branchId,
       ...(query.search ? { name: { contains: query.search, mode: 'insensitive' } } : {}),
     };
-    return this.prisma.stockItem.findMany({ where, orderBy: { name: 'asc' } });
+    const { page, limit, skip, take } = getPagination(query);
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.stockItem.findMany({ where, orderBy: { name: 'asc' }, skip, take }),
+      this.prisma.stockItem.count({ where }),
+    ]);
+    return buildPaginatedResponse(data, total, page, limit);
   }
 
   async findOne(id: number) {

@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { OrderStatus, Prisma } from '@prisma/client';
 import { BranchesService } from '../branches/branches.service';
 import { buildDateRange } from '../common/utils/date-range';
+import { buildPaginatedResponse, getPagination } from '../common/utils/pagination';
 import { fromPrismaPaymentMethod, toPrismaPaymentMethod } from '../common/payment-method';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
@@ -86,22 +87,34 @@ export class SalesService {
   }
 
   async findAll(query: QuerySalesDto) {
+    const createdAt = buildDateRange(query.from, query.to);
     const where: Prisma.SaleWhereInput = {
       branchId: query.branchId,
       ...(query.paymentMethod ? { paymentMethod: toPrismaPaymentMethod(query.paymentMethod) } : {}),
-      ...(buildDateRange(query.from, query.to) ? { createdAt: buildDateRange(query.from, query.to) } : {}),
+      ...(createdAt ? { createdAt } : {}),
     };
-    const sales = await this.prisma.sale.findMany({
-      where,
-      include: {
-        items: true,
-        branch: true,
-        sourceOrder: true,
-        createdBy: { select: { id: true, name: true, email: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-    return sales.map((sale) => this.serializeSale(sale));
+    const { page, limit, skip, take } = getPagination(query);
+    const [sales, total] = await this.prisma.$transaction([
+      this.prisma.sale.findMany({
+        where,
+        include: {
+          items: true,
+          branch: true,
+          sourceOrder: true,
+          createdBy: { select: { id: true, name: true, email: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+      }),
+      this.prisma.sale.count({ where }),
+    ]);
+    return buildPaginatedResponse(
+      sales.map((sale) => this.serializeSale(sale)),
+      total,
+      page,
+      limit,
+    );
   }
 
   async findOne(id: number) {
