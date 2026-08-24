@@ -35,6 +35,8 @@ model User {
   salesCreated Sale[]   @relation("SaleCreatedBy")
   ordersCreated Order[] @relation("OrderCreatedBy")
   expensesCreated Expense[] @relation("ExpenseCreatedBy")
+  cashMovementsCreated CashMovement[] @relation("CashMovementCreatedBy")
+  cashClosuresCreated CashClosure[] @relation("CashClosureCreatedBy")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -46,6 +48,8 @@ model Branch {
   sales      Sale[]
   orders     Order[]
   expenses   Expense[]
+  cashMovements CashMovement[]
+  cashClosures CashClosure[]
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
 }
@@ -92,6 +96,7 @@ model Sale {
   items         SaleItem[]
   sourceOrderId Int?          @unique
   sourceOrder   Order?        @relation(fields: [sourceOrderId], references: [id])
+  cashMovement  CashMovement?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
@@ -127,10 +132,12 @@ model Order {
   detail    String
   amount    Float
   deposit   Float?
+  depositPaymentMethod PaymentMethod?
   dueDate   DateTime
   status    OrderStatus @default(PENDING)
   items     OrderItem[]
   sale      Sale?
+  depositCashMovement CashMovement?
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 
@@ -171,4 +178,48 @@ model Expense {
   @@index([branchId])
   @@index([createdByUserId])
   @@index([createdAt])
+}
+
+model CashMovement {
+  id              Int            @id @default(autoincrement())
+  branchId        Int
+  branch          Branch         @relation(fields: [branchId], references: [id])
+  createdByUserId Int?
+  createdBy       User?          @relation("CashMovementCreatedBy", fields: [createdByUserId], references: [id])
+  type            String
+  source          String
+  description     String?
+  amount          Float
+  paymentMethod   PaymentMethod?
+  orderId         Int?           @unique
+  order           Order?         @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  saleId          Int?           @unique
+  sale            Sale?          @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  occurredAt      DateTime       @default(now())
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([branchId])
+  @@index([createdByUserId])
+  @@index([type])
+  @@index([source])
+  @@index([occurredAt])
+}
+
+model CashClosure {
+  id              Int      @id @default(autoincrement())
+  branchId        Int
+  branch          Branch   @relation(fields: [branchId], references: [id])
+  createdByUserId Int?
+  createdBy       User?    @relation("CashClosureCreatedBy", fields: [createdByUserId], references: [id])
+  date            DateTime
+  amount          Float
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([branchId, date])
+  @@index([branchId])
+  @@index([createdByUserId])
+  @@index([date])
 }

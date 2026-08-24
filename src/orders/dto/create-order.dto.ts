@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsDateString, IsInt, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { IsArray, IsDateString, IsIn, IsInt, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { paymentMethodValues } from '../../common/payment-method';
 import { CreateOrderItemDto } from './create-order-item.dto';
 
 export class CreateOrderDto {
@@ -28,6 +29,10 @@ export class CreateOrderDto {
   @IsNumber()
   @Min(0)
   deposit?: number;
+
+  @IsOptional()
+  @IsIn(paymentMethodValues)
+  depositPaymentMethod?: string;
 
   @IsDateString()
   dueDate: string;

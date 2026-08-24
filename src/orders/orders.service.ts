@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { OrderStatus, Prisma } from '@prisma/client';
+import { OrderStatus, PaymentMethod, Prisma } from '@prisma/client';
 import { BranchesService } from '../branches/branches.service';
+import { toPrismaPaymentMethod } from '../common/payment-method';
 import { buildPaginatedResponse, getPagination } from '../common/utils/pagination';
 import { PrismaService } from '../prisma/prisma.service';
 import { SalesService } from '../sales/sales.service';
@@ -30,10 +31,19 @@ export class OrdersService {
           detail: dto.detail,
           amount: dto.amount,
           deposit: dto.deposit,
+          depositPaymentMethod: dto.depositPaymentMethod ? toPrismaPaymentMethod(dto.depositPaymentMethod) : undefined,
           dueDate: new Date(dto.dueDate),
         },
       });
 
+      await this.syncDepositCashMovement(
+        tx,
+        order.id,
+        dto.branchId,
+        createdByUserId,
+        dto.deposit,
+        dto.depositPaymentMethod ? toPrismaPaymentMethod(dto.depositPaymentMethod) : undefined,
+      );
       await this.reserveOrderItems(tx, order.id, dto.branchId, dto.items ?? []);
       return tx.order.findUniqueOrThrow({ where: { id: order.id }, include: this.orderInclude });
     });
@@ -90,7 +100,7 @@ export class OrdersService {
         await tx.orderItem.deleteMany({ where: { orderId: id } });
       }
 
-      return tx.order.update({
+      const updated = await tx.order.update({
         where: { id },
         data: {
           branchId: dto.branchId,
@@ -99,11 +109,25 @@ export class OrdersService {
           detail: dto.detail,
           amount: dto.amount,
           deposit: dto.deposit,
+          depositPaymentMethod: dto.depositPaymentMethod ? toPrismaPaymentMethod(dto.depositPaymentMethod) : undefined,
           dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
           status: dto.status,
         },
         include: this.orderInclude,
       });
+
+      if (dto.deposit !== undefined || dto.depositPaymentMethod !== undefined || dto.branchId !== undefined) {
+        await this.syncDepositCashMovement(
+          tx,
+          id,
+          targetBranchId,
+          order.createdByUserId ?? undefined,
+          dto.deposit !== undefined ? dto.deposit : order.deposit,
+          dto.depositPaymentMethod ? toPrismaPaymentMethod(dto.depositPaymentMethod) : order.depositPaymentMethod,
+        );
+      }
+
+      return tx.order.findUniqueOrThrow({ where: { id: updated.id }, include: this.orderInclude });
     });
   }
 
@@ -126,6 +150,7 @@ export class OrdersService {
       throw new BadRequestException('No se puede eliminar un pedido vendido');
     }
     return this.prisma.$transaction(async (tx) => {
+      await tx.cashMovement.deleteMany({ where: { orderId: id } });
       return tx.order.delete({ where: { id } });
     });
   }
@@ -142,17 +167,20 @@ export class OrdersService {
       });
     }
 
+    const finalAmount = dto.amount ?? order.amount;
+    const remainingCashAmount = Math.max(finalAmount - (order.deposit ?? 0), 0);
+
     return this.salesService.create(
       {
         branchId: order.branchId,
         customer: dto.customer || order.customer,
-        amount: dto.amount ?? order.amount,
+        amount: finalAmount,
         paymentMethod: dto.paymentMethod,
         sourceOrderId: order.id,
         items: finalItems,
       },
       createdByUserId,
-      { skipStockDecrement: true },
+      { skipStockDecrement: true, cashAmount: remainingCashAmount },
     );
   }
 
@@ -160,8 +188,42 @@ export class OrdersService {
     branch: true,
     sale: true,
     items: true,
+    depositCashMovement: true,
     createdBy: { select: { id: true, name: true, email: true } },
   };
+
+  private async syncDepositCashMovement(
+    tx: Prisma.TransactionClient,
+    orderId: number,
+    branchId: number,
+    createdByUserId: number | undefined,
+    deposit: number | null | undefined,
+    paymentMethod: PaymentMethod | null | undefined,
+  ) {
+    if (!deposit || deposit <= 0) {
+      await tx.cashMovement.deleteMany({ where: { orderId } });
+      return;
+    }
+
+    await tx.cashMovement.upsert({
+      where: { orderId },
+      create: {
+        branchId,
+        createdByUserId,
+        type: 'INCOME',
+        source: 'ORDER_DEPOSIT',
+        description: `Seña pedido #${orderId}`,
+        amount: deposit,
+        paymentMethod: paymentMethod ?? PaymentMethod.Efectivo,
+        orderId,
+      },
+      update: {
+        branchId,
+        amount: deposit,
+        paymentMethod: paymentMethod ?? PaymentMethod.Efectivo,
+      },
+    });
+  }
 
   private async reserveOrderItems(
     tx: Prisma.TransactionClient,

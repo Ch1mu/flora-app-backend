@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { OrderStatus, Prisma } from '@prisma/client';
+import { OrderStatus, PaymentMethod, Prisma } from '@prisma/client';
 import { BranchesService } from '../branches/branches.service';
 import { buildDateRange } from '../common/utils/date-range';
 import { buildPaginatedResponse, getPagination } from '../common/utils/pagination';
@@ -16,16 +16,22 @@ export class SalesService {
     private readonly branchesService: BranchesService,
   ) {}
 
-  async create(dto: CreateSaleDto, createdByUserId?: number, options?: { skipStockDecrement?: boolean }) {
+  async create(
+    dto: CreateSaleDto,
+    createdByUserId?: number,
+    options?: { skipStockDecrement?: boolean; cashAmount?: number },
+  ) {
     await this.branchesService.ensureExists(dto.branchId);
     const paymentMethod = toPrismaPaymentMethod(dto.paymentMethod);
 
     return this.prisma.$transaction(async (tx) => {
+      let sourceOrderDeposit = 0;
       if (dto.sourceOrderId) {
         const order = await tx.order.findUnique({ where: { id: dto.sourceOrderId } });
         if (!order) throw new NotFoundException('Pedido no encontrado');
         if (order.status !== OrderStatus.PENDING) throw new BadRequestException('El pedido no esta pendiente');
         if (order.branchId !== dto.branchId) throw new BadRequestException('El pedido pertenece a otra sucursal');
+        sourceOrderDeposit = order.deposit ?? 0;
       }
 
       const stockIds = dto.items.map((item) => item.stockItemId);
@@ -71,6 +77,17 @@ export class SalesService {
           data: { status: OrderStatus.SOLD, amount: dto.amount },
         });
       }
+
+      const cashAmount = options?.cashAmount ?? Math.max(dto.amount - sourceOrderDeposit, 0);
+      await this.syncSaleCashMovement(
+        tx,
+        sale.id,
+        dto.branchId,
+        createdByUserId,
+        cashAmount,
+        paymentMethod,
+        dto.sourceOrderId,
+      );
 
       return this.serializeSale(sale);
     });
@@ -123,7 +140,7 @@ export class SalesService {
 
   async update(id: number, dto: UpdateSaleDto) {
     return this.prisma.$transaction(async (tx) => {
-      const sale = await tx.sale.findUnique({ where: { id }, include: { items: true } });
+      const sale = await tx.sale.findUnique({ where: { id }, include: { items: true, sourceOrder: true } });
       if (!sale) throw new NotFoundException('Venta no encontrada');
 
       const targetBranchId = dto.branchId ?? sale.branchId;
@@ -189,6 +206,19 @@ export class SalesService {
         await tx.order.update({ where: { id: sale.sourceOrderId }, data: { amount: dto.amount } });
       }
 
+      const cashAmount = updated.sourceOrderId
+        ? Math.max(updated.amount - (updated.sourceOrder?.deposit ?? 0), 0)
+        : updated.amount;
+      await this.syncSaleCashMovement(
+        tx,
+        updated.id,
+        updated.branchId,
+        sale.createdByUserId ?? undefined,
+        cashAmount,
+        updated.paymentMethod,
+        updated.sourceOrderId ?? undefined,
+      );
+
       return this.serializeSale(updated);
     });
   }
@@ -202,7 +232,43 @@ export class SalesService {
         await tx.order.update({ where: { id: sale.sourceOrderId }, data: { status: OrderStatus.PENDING } });
       }
 
+      await tx.cashMovement.deleteMany({ where: { saleId: id } });
       return tx.sale.delete({ where: { id } });
+    });
+  }
+
+  private async syncSaleCashMovement(
+    tx: Prisma.TransactionClient,
+    saleId: number,
+    branchId: number,
+    createdByUserId: number | undefined,
+    amount: number,
+    paymentMethod: PaymentMethod,
+    sourceOrderId?: number,
+  ) {
+    if (amount <= 0) {
+      await tx.cashMovement.deleteMany({ where: { saleId } });
+      return;
+    }
+
+    await tx.cashMovement.upsert({
+      where: { saleId },
+      create: {
+        branchId,
+        createdByUserId,
+        type: 'INCOME',
+        source: 'SALE',
+        description: sourceOrderId ? `Saldo pedido #${sourceOrderId}` : `Venta #${saleId}`,
+        amount,
+        paymentMethod,
+        saleId,
+      },
+      update: {
+        branchId,
+        amount,
+        paymentMethod,
+        description: sourceOrderId ? `Saldo pedido #${sourceOrderId}` : `Venta #${saleId}`,
+      },
     });
   }
 
