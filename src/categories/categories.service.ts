@@ -1,14 +1,22 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
+import { QueryCategoriesDto } from './dto/query-categories.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 
 @Injectable()
 export class CategoriesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  findAll() {
-    return this.prisma.productCategory.findMany({ orderBy: { name: 'asc' } });
+  findAll(query: QueryCategoriesDto = {}) {
+    const search = query.search?.trim();
+
+    return this.prisma.productCategory.findMany({
+      where: search
+        ? { name: { contains: search, mode: 'insensitive' } }
+        : undefined,
+      orderBy: { name: 'asc' },
+    });
   }
 
   async create(dto: CreateCategoryDto) {

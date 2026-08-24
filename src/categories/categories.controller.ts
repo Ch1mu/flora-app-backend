@@ -1,6 +1,7 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query } from '@nestjs/common';
 import { CategoriesService } from './categories.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
+import { QueryCategoriesDto } from './dto/query-categories.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 
 @Controller('categories')
@@ -8,8 +9,8 @@ export class CategoriesController {
   constructor(private readonly categoriesService: CategoriesService) {}
 
   @Get()
-  findAll() {
-    return this.categoriesService.findAll();
+  findAll(@Query() query: QueryCategoriesDto) {
+    return this.categoriesService.findAll(query);
   }
 
   @Post()
