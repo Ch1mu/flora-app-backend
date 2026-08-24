@@ -39,9 +39,6 @@ export class SalesService {
         if (stockItem.branchId !== dto.branchId) {
           throw new BadRequestException(`El producto ${stockItem.name} pertenece a otra sucursal`);
         }
-        if (!options?.skipStockDecrement && stockItem.units < item.units) {
-          throw new BadRequestException(`Stock insuficiente para ${stockItem.name}`);
-        }
       }
 
       const sale = await tx.sale.create({
@@ -59,23 +56,14 @@ export class SalesService {
                 stockItemId: stockItem.id,
                 name: stockItem.name,
                 units: item.units,
-                unitPrice: stockItem.price,
-                subtotal: stockItem.price * item.units,
+                unitPrice: stockItem.finalPrice ?? stockItem.price,
+                subtotal: (stockItem.finalPrice ?? stockItem.price) * item.units,
               };
             }),
           },
         },
         include: { items: true, branch: true, createdBy: { select: { id: true, name: true, email: true } } },
       });
-
-      if (!options?.skipStockDecrement) {
-        for (const item of dto.items) {
-          await tx.stockItem.update({
-            where: { id: item.stockItemId },
-            data: { units: { decrement: item.units } },
-          });
-        }
-      }
 
       if (dto.sourceOrderId) {
         await tx.order.update({
@@ -151,13 +139,6 @@ export class SalesService {
       }
 
       if (dto.items !== undefined) {
-        for (const item of sale.items) {
-          await tx.stockItem.update({
-            where: { id: item.stockItemId },
-            data: { units: { increment: item.units } },
-          });
-        }
-
         const stockIds = dto.items.map((item) => item.stockItemId);
         const stockItems = stockIds.length
           ? await tx.stockItem.findMany({ where: { id: { in: stockIds } } })
@@ -168,9 +149,6 @@ export class SalesService {
           if (!stockItem) throw new NotFoundException(`Producto de stock ${item.stockItemId} no encontrado`);
           if (stockItem.branchId !== targetBranchId) {
             throw new BadRequestException(`El producto ${stockItem.name} pertenece a otra sucursal`);
-          }
-          if (stockItem.units < item.units) {
-            throw new BadRequestException(`Stock insuficiente para ${stockItem.name}`);
           }
         }
 
@@ -184,13 +162,9 @@ export class SalesService {
               stockItemId: stockItem.id,
               name: stockItem.name,
               units: item.units,
-              unitPrice: stockItem.price,
-              subtotal: stockItem.price * item.units,
+              unitPrice: stockItem.finalPrice ?? stockItem.price,
+              subtotal: (stockItem.finalPrice ?? stockItem.price) * item.units,
             },
-          });
-          await tx.stockItem.update({
-            where: { id: item.stockItemId },
-            data: { units: { decrement: item.units } },
           });
         }
       }
@@ -226,13 +200,6 @@ export class SalesService {
 
       if (sale.sourceOrderId) {
         await tx.order.update({ where: { id: sale.sourceOrderId }, data: { status: OrderStatus.PENDING } });
-      } else {
-        for (const item of sale.items) {
-          await tx.stockItem.update({
-            where: { id: item.stockItemId },
-            data: { units: { increment: item.units } },
-          });
-        }
       }
 
       return tx.sale.delete({ where: { id } });

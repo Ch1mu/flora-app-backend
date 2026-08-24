@@ -15,6 +15,10 @@ export class CreateExpenseDto {
   @IsString()
   description?: string;
 
+  @IsOptional()
+  @IsString()
+  invoiceType?: string;
+
   @Type(() => Number)
   @IsNumber()
   @Min(0)

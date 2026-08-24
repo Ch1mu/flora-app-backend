@@ -26,4 +26,9 @@ export class ReportsController {
   pendingOrders(@Query() query: QueryReportsDto) {
     return this.reportsService.pendingOrders(query);
   }
+
+  @Get('sales-by-category')
+  salesByCategory(@Query() query: QueryReportsDto) {
+    return this.reportsService.salesByCategory(query);
+  }
 }

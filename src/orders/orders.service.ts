@@ -82,14 +82,11 @@ export class OrdersService {
       const targetBranchId = dto.branchId ?? order.branchId;
 
       if (dto.items !== undefined) {
-        await this.restoreOrderItems(tx, order.items);
         await tx.orderItem.deleteMany({ where: { orderId: id } });
         await this.reserveOrderItems(tx, id, targetBranchId, dto.items);
       }
 
       if (dto.status === OrderStatus.CANCELLED) {
-        const currentItems = dto.items !== undefined ? await tx.orderItem.findMany({ where: { orderId: id } }) : order.items;
-        await this.restoreOrderItems(tx, currentItems);
         await tx.orderItem.deleteMany({ where: { orderId: id } });
       }
 
@@ -114,7 +111,6 @@ export class OrdersService {
     const order = await this.findOne(id);
     if (order.status === OrderStatus.SOLD) throw new BadRequestException('No se puede cancelar un pedido vendido');
     return this.prisma.$transaction(async (tx) => {
-      await this.restoreOrderItems(tx, order.items);
       await tx.orderItem.deleteMany({ where: { orderId: id } });
       return tx.order.update({
         where: { id },
@@ -130,7 +126,6 @@ export class OrdersService {
       throw new BadRequestException('No se puede eliminar un pedido vendido');
     }
     return this.prisma.$transaction(async (tx) => {
-      await this.restoreOrderItems(tx, order.items);
       return tx.order.delete({ where: { id } });
     });
   }
@@ -142,7 +137,6 @@ export class OrdersService {
 
     if (dto.items !== undefined) {
       await this.prisma.$transaction(async (tx) => {
-        await this.restoreOrderItems(tx, order.items);
         await tx.orderItem.deleteMany({ where: { orderId: id } });
         await this.reserveOrderItems(tx, id, order.branchId, dto.items ?? []);
       });
@@ -184,9 +178,7 @@ export class OrdersService {
       if (stockItem.branchId !== branchId) {
         throw new BadRequestException(`El producto ${stockItem.name} pertenece a otra sucursal`);
       }
-      if (stockItem.units < item.units) {
-        throw new BadRequestException(`Stock insuficiente para ${stockItem.name}`);
-      }
+      const unitPrice = stockItem.finalPrice ?? stockItem.price;
 
       await tx.orderItem.create({
         data: {
@@ -194,25 +186,9 @@ export class OrdersService {
           stockItemId: stockItem.id,
           name: stockItem.name,
           units: item.units,
-          unitPrice: stockItem.price,
-          subtotal: stockItem.price * item.units,
+          unitPrice,
+          subtotal: unitPrice * item.units,
         },
-      });
-      await tx.stockItem.update({
-        where: { id: stockItem.id },
-        data: { units: { decrement: item.units } },
-      });
-    }
-  }
-
-  private async restoreOrderItems(
-    tx: Prisma.TransactionClient,
-    items: Array<{ stockItemId: number; units: number }>,
-  ) {
-    for (const item of items) {
-      await tx.stockItem.update({
-        where: { id: item.stockItemId },
-        data: { units: { increment: item.units } },
       });
     }
   }

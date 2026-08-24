@@ -18,7 +18,21 @@ export class StockService {
 
   async create(dto: CreateStockItemDto) {
     await this.branchesService.ensureExists(dto.branchId);
-    return this.prisma.stockItem.create({ data: dto });
+    const category = await this.resolveCategory(dto.categoryId, dto.category);
+    const finalPrice = dto.finalPrice ?? dto.price ?? 0;
+    return this.prisma.stockItem.create({
+      data: {
+        name: dto.name,
+        category: category.name,
+        categoryId: category.id,
+        branchId: dto.branchId,
+        units: dto.units ?? 0,
+        costPrice: dto.costPrice,
+        finalPrice,
+        price: finalPrice,
+      },
+      include: { branch: true, categoryRef: true },
+    });
   }
 
   async findAll(query: QueryStockDto) {
@@ -28,20 +42,20 @@ export class StockService {
     const { page, limit, skip, take } = getPagination(query);
     if (query.search) {
       const searchTokens = tokenizeSearch(query.search);
-      const items = await this.prisma.stockItem.findMany({ where, orderBy: { name: 'asc' } });
+      const items = await this.prisma.stockItem.findMany({ where, include: { categoryRef: true }, orderBy: { name: 'asc' } });
       const data = items.filter((item) => matchesSearchTokens(item.name, searchTokens));
       return buildPaginatedResponse(data.slice(skip, skip + take), data.length, page, limit);
     }
 
     const [data, total] = await this.prisma.$transaction([
-      this.prisma.stockItem.findMany({ where, orderBy: { name: 'asc' }, skip, take }),
+      this.prisma.stockItem.findMany({ where, include: { categoryRef: true }, orderBy: { name: 'asc' }, skip, take }),
       this.prisma.stockItem.count({ where }),
     ]);
     return buildPaginatedResponse(data, total, page, limit);
   }
 
   async findOne(id: number) {
-    const item = await this.prisma.stockItem.findUnique({ where: { id }, include: { branch: true } });
+    const item = await this.prisma.stockItem.findUnique({ where: { id }, include: { branch: true, categoryRef: true } });
     if (!item) throw new NotFoundException('Producto de stock no encontrado');
     return item;
   }
@@ -49,7 +63,22 @@ export class StockService {
   async update(id: number, dto: UpdateStockItemDto) {
     await this.findOne(id);
     if (dto.branchId) await this.branchesService.ensureExists(dto.branchId);
-    return this.prisma.stockItem.update({ where: { id }, data: dto });
+    const category = dto.categoryId || dto.category ? await this.resolveCategory(dto.categoryId, dto.category) : undefined;
+    const finalPrice = dto.finalPrice ?? dto.price;
+    return this.prisma.stockItem.update({
+      where: { id },
+      data: {
+        name: dto.name,
+        category: category?.name,
+        categoryId: category?.id,
+        branchId: dto.branchId,
+        units: dto.units,
+        costPrice: dto.costPrice,
+        finalPrice,
+        price: finalPrice,
+      },
+      include: { branch: true, categoryRef: true },
+    });
   }
 
   async updateUnits(id: number, dto: UpdateStockUnitsDto) {
@@ -82,6 +111,7 @@ export class StockService {
     const existingItems = await this.prisma.stockItem.findMany({
       where: { branchId: dto.branchId },
     });
+    const categories = await this.ensureImportCategories(dedupedRows.map((row) => row.category));
     const existingByKey = new Map(existingItems.map((item) => [buildImportKey(item.name, item.category), item]));
     let created = 0;
     let updated = 0;
@@ -90,14 +120,16 @@ export class StockService {
       const batch = dedupedRows.slice(index, index + 100);
       await this.prisma.$transaction(
         batch.map((row) => {
-          const price = roundMoney((row.sourcePrice / 2) * 2.3);
+          const costPrice = roundMoney(row.sourcePrice / 2);
+          const finalPrice = roundMoney(costPrice * 2.3);
           const existing = existingByKey.get(buildImportKey(row.name, row.category));
+          const category = categories.get(row.category)!;
 
           if (existing) {
             updated++;
             return this.prisma.stockItem.update({
               where: { id: existing.id },
-              data: { price },
+              data: { categoryId: category.id, costPrice, finalPrice, price: finalPrice },
             });
           }
 
@@ -107,8 +139,11 @@ export class StockService {
               branchId: dto.branchId,
               name: row.name,
               category: row.category,
+              categoryId: category.id,
               units: 0,
-              price,
+              costPrice,
+              finalPrice,
+              price: finalPrice,
             },
           });
         }),
@@ -122,6 +157,30 @@ export class StockService {
       branchId: dto.branchId,
       priceFormula: 'sourcePrice / 2 * 2.3',
     };
+  }
+
+  private async resolveCategory(categoryId?: number, categoryName?: string) {
+    if (categoryId) {
+      const category = await this.prisma.productCategory.findUnique({ where: { id: categoryId } });
+      if (!category) throw new NotFoundException('Categoria no encontrada');
+      return category;
+    }
+    if (!categoryName?.trim()) throw new BadRequestException('Debe indicar una categoria');
+    const existing = await this.prisma.productCategory.findUnique({ where: { name: categoryName.trim() } });
+    if (existing) return existing;
+    return this.prisma.productCategory.create({ data: { name: categoryName.trim() } });
+  }
+
+  private async ensureImportCategories(categoryNames: string[]) {
+    const uniqueNames = [...new Set(categoryNames.map((name) => name.trim()).filter(Boolean))];
+    const existing = await this.prisma.productCategory.findMany({ where: { name: { in: uniqueNames } } });
+    const byName = new Map(existing.map((category) => [category.name, category]));
+    for (const name of uniqueNames) {
+      if (!byName.has(name)) {
+        byName.set(name, await this.prisma.productCategory.create({ data: { name } }));
+      }
+    }
+    return byName;
   }
 
   private async extractStockRowsFromPdf(buffer: Buffer) {

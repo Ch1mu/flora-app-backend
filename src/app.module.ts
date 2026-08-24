@@ -12,6 +12,7 @@ import { StockModule } from './stock/stock.module';
 import { UsersModule } from './users/users.module';
 import { AppController } from './app.controller';
 import { ExpensesModule } from './expenses/expenses.module';
+import { CategoriesModule } from './categories/categories.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { ExpensesModule } from './expenses/expenses.module';
     OrdersModule,
     ReportsModule,
     ExpensesModule,
+    CategoriesModule,
   ],
   controllers: [AppController],
   providers: [{ provide: APP_GUARD, useClass: JwtAuthGuard }],

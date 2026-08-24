@@ -52,6 +52,41 @@ export class ReportsService {
     });
   }
 
+  async salesByCategory(query: QueryReportsDto) {
+    const saleWhere = this.buildSaleWhere(query);
+    const items = await this.prisma.saleItem.findMany({
+      where: { sale: saleWhere },
+      include: {
+        stockItem: {
+          include: { categoryRef: true },
+        },
+      },
+    });
+
+    const byCategory = new Map<
+      string,
+      { categoryId: number | null; category: string; total: number; units: number }
+    >();
+
+    for (const item of items) {
+      const categoryId = item.stockItem.categoryId ?? null;
+      const category = item.stockItem.categoryRef?.name ?? item.stockItem.category;
+      const key = categoryId ? `id:${categoryId}` : `name:${category}`;
+      const current = byCategory.get(key) ?? { categoryId, category, total: 0, units: 0 };
+      current.total += item.subtotal;
+      current.units += item.units;
+      byCategory.set(key, current);
+    }
+
+    const grandTotal = [...byCategory.values()].reduce((sum, row) => sum + row.total, 0);
+    return [...byCategory.values()]
+      .map((row) => ({
+        ...row,
+        percentage: grandTotal > 0 ? Math.round((row.total / grandTotal) * 10000) / 100 : 0,
+      }))
+      .sort((a, b) => b.total - a.total);
+  }
+
   private buildSaleWhere(query: QueryReportsDto): Prisma.SaleWhereInput {
     return {
       ...(query.branchId ? { branchId: query.branchId } : {}),
