@@ -59,7 +59,7 @@ export class OrdersService {
       this.prisma.order.findMany({
         where,
         include: this.orderInclude,
-        orderBy: { dueDate: 'asc' },
+        orderBy: { createdAt: 'desc' },
         skip,
         take,
       }),
