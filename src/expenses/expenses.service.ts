@@ -28,6 +28,9 @@ export class ExpensesService {
     const where: Prisma.ExpenseWhereInput = {
       ...(query.branchId ? { branchId: query.branchId } : {}),
       ...(query.search ? { name: { contains: query.search, mode: 'insensitive' } } : {}),
+      ...(query.invoiceType?.trim()
+        ? { invoiceType: { equals: query.invoiceType.trim(), mode: 'insensitive' } }
+        : {}),
       ...(createdAt ? { createdAt } : {}),
     };
     const { page, limit, skip, take } = getPagination(query);

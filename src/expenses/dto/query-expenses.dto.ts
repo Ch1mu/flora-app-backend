@@ -14,6 +14,10 @@ export class QueryExpensesDto extends PaginationQueryDto {
   search?: string;
 
   @IsOptional()
+  @IsString()
+  invoiceType?: string;
+
+  @IsOptional()
   @IsDateString()
   from?: string;
 
