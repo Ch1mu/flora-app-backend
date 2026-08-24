@@ -158,7 +158,9 @@ export class OrdersService {
   async convertToSale(id: number, dto: ConvertOrderToSaleDto, createdByUserId?: number) {
     const order = await this.findOne(id);
     if (order.status !== OrderStatus.PENDING) throw new BadRequestException('Solo se pueden vender pedidos pendientes');
-    const finalItems = dto.items ?? order.items.map((item) => ({ stockItemId: item.stockItemId, units: item.units }));
+    const finalItems = dto.items ?? order.items
+      .filter((item): item is typeof item & { stockItemId: number } => item.stockItemId !== null)
+      .map((item) => ({ stockItemId: item.stockItemId, units: item.units }));
 
     if (dto.items !== undefined) {
       await this.prisma.$transaction(async (tx) => {
@@ -237,9 +239,6 @@ export class OrdersService {
     for (const item of items) {
       const stockItem = stockItems.find((stock) => stock.id === item.stockItemId);
       if (!stockItem) throw new NotFoundException(`Producto de stock ${item.stockItemId} no encontrado`);
-      if (stockItem.branchId !== branchId) {
-        throw new BadRequestException(`El producto ${stockItem.name} pertenece a otra sucursal`);
-      }
       const unitPrice = stockItem.finalPrice ?? stockItem.price;
 
       await tx.orderItem.create({

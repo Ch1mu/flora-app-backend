@@ -33,10 +33,8 @@ export class ReportsService {
   lowStock(query: QueryLowStockDto) {
     return this.prisma.stockItem.findMany({
       where: {
-        ...(query.branchId ? { branchId: query.branchId } : {}),
         units: { lte: query.threshold ?? 5 },
       },
-      include: { branch: true },
       orderBy: [{ units: 'asc' }, { name: 'asc' }],
     });
   }
@@ -69,8 +67,8 @@ export class ReportsService {
     >();
 
     for (const item of items) {
-      const categoryId = item.stockItem.categoryId ?? null;
-      const category = item.stockItem.categoryRef?.name ?? item.stockItem.category;
+      const categoryId = item.stockItem?.categoryId ?? null;
+      const category = item.stockItem?.categoryRef?.name ?? item.stockItem?.category ?? 'Sin categoria';
       const key = categoryId ? `id:${categoryId}` : `name:${category}`;
       const current = byCategory.get(key) ?? { categoryId, category, total: 0, units: 0 };
       current.total += item.subtotal;

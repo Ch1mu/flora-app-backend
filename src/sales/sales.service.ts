@@ -42,9 +42,6 @@ export class SalesService {
       for (const item of dto.items) {
         const stockItem = stockItems.find((stock) => stock.id === item.stockItemId);
         if (!stockItem) throw new NotFoundException(`Producto de stock ${item.stockItemId} no encontrado`);
-        if (stockItem.branchId !== dto.branchId) {
-          throw new BadRequestException(`El producto ${stockItem.name} pertenece a otra sucursal`);
-        }
       }
 
       const sale = await tx.sale.create({
@@ -164,9 +161,6 @@ export class SalesService {
         for (const item of dto.items) {
           const stockItem = stockItems.find((stock) => stock.id === item.stockItemId);
           if (!stockItem) throw new NotFoundException(`Producto de stock ${item.stockItemId} no encontrado`);
-          if (stockItem.branchId !== targetBranchId) {
-            throw new BadRequestException(`El producto ${stockItem.name} pertenece a otra sucursal`);
-          }
         }
 
         await tx.saleItem.deleteMany({ where: { saleId: id } });

@@ -27,31 +27,30 @@ enum OrderStatus {
 }
 
 model User {
-  id           Int      @id @default(autoincrement())
-  name         String
-  email        String   @unique
-  passwordHash String
-  isActive     Boolean  @default(true)
-  salesCreated Sale[]   @relation("SaleCreatedBy")
-  ordersCreated Order[] @relation("OrderCreatedBy")
-  expensesCreated Expense[] @relation("ExpenseCreatedBy")
+  id                   Int            @id @default(autoincrement())
+  name                 String
+  email                String         @unique
+  passwordHash         String
+  isActive             Boolean        @default(true)
+  salesCreated         Sale[]         @relation("SaleCreatedBy")
+  ordersCreated        Order[]        @relation("OrderCreatedBy")
+  expensesCreated      Expense[]      @relation("ExpenseCreatedBy")
   cashMovementsCreated CashMovement[] @relation("CashMovementCreatedBy")
-  cashClosuresCreated CashClosure[] @relation("CashClosureCreatedBy")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  cashClosuresCreated  CashClosure[]  @relation("CashClosureCreatedBy")
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
 }
 
 model Branch {
-  id         Int         @id @default(autoincrement())
-  name       String      @unique
-  stockItems StockItem[]
-  sales      Sale[]
-  orders     Order[]
-  expenses   Expense[]
+  id            Int            @id @default(autoincrement())
+  name          String         @unique
+  sales         Sale[]
+  orders        Order[]
+  expenses      Expense[]
   cashMovements CashMovement[]
-  cashClosures CashClosure[]
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
+  cashClosures  CashClosure[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 }
 
 model ProductCategory {
@@ -63,42 +62,39 @@ model ProductCategory {
 }
 
 model StockItem {
-  id        Int        @id @default(autoincrement())
-  name      String
-  category  String
-  categoryId Int?
+  id          Int              @id @default(autoincrement())
+  name        String
+  category    String
+  categoryId  Int?
   categoryRef ProductCategory? @relation(fields: [categoryId], references: [id])
-  branchId  Int
-  branch    Branch     @relation(fields: [branchId], references: [id])
-  units     Int
-  price     Float
-  costPrice  Float?
-  finalPrice Float?
-  saleItems SaleItem[]
-  orderItems OrderItem[]
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  units       Int
+  price       Float
+  costPrice   Float?
+  finalPrice  Float?
+  saleItems   SaleItem[]
+  orderItems  OrderItem[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
 
-  @@index([branchId])
   @@index([categoryId])
   @@index([name])
 }
 
 model Sale {
-  id            Int           @id @default(autoincrement())
-  branchId      Int
-  branch        Branch        @relation(fields: [branchId], references: [id])
+  id              Int           @id @default(autoincrement())
+  branchId        Int
+  branch          Branch        @relation(fields: [branchId], references: [id])
   createdByUserId Int?
-  createdBy       User?       @relation("SaleCreatedBy", fields: [createdByUserId], references: [id])
-  customer      String        @default("Consumidor final")
-  amount        Float
-  paymentMethod PaymentMethod
-  items         SaleItem[]
-  sourceOrderId Int?          @unique
-  sourceOrder   Order?        @relation(fields: [sourceOrderId], references: [id])
-  cashMovement  CashMovement?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  createdBy       User?         @relation("SaleCreatedBy", fields: [createdByUserId], references: [id])
+  customer        String        @default("Consumidor final")
+  amount          Float
+  paymentMethod   PaymentMethod
+  items           SaleItem[]
+  sourceOrderId   Int?          @unique
+  sourceOrder     Order?        @relation(fields: [sourceOrderId], references: [id])
+  cashMovement    CashMovement?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   @@index([branchId])
   @@index([createdByUserId])
@@ -107,11 +103,11 @@ model Sale {
 }
 
 model SaleItem {
-  id          Int       @id @default(autoincrement())
+  id          Int        @id @default(autoincrement())
   saleId      Int
-  sale        Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  stockItemId Int
-  stockItem   StockItem @relation(fields: [stockItemId], references: [id])
+  sale        Sale       @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  stockItemId Int?
+  stockItem   StockItem? @relation(fields: [stockItemId], references: [id], onDelete: SetNull)
   name        String
   units       Int
   unitPrice   Float
@@ -122,24 +118,24 @@ model SaleItem {
 }
 
 model Order {
-  id        Int         @id @default(autoincrement())
-  branchId  Int
-  branch    Branch      @relation(fields: [branchId], references: [id])
-  createdByUserId Int?
-  createdBy       User?       @relation("OrderCreatedBy", fields: [createdByUserId], references: [id])
-  customer  String
-  phone     String?
-  detail    String
-  amount    Float
-  deposit   Float?
+  id                   Int            @id @default(autoincrement())
+  branchId             Int
+  branch               Branch         @relation(fields: [branchId], references: [id])
+  createdByUserId      Int?
+  createdBy            User?          @relation("OrderCreatedBy", fields: [createdByUserId], references: [id])
+  customer             String
+  phone                String?
+  detail               String
+  amount               Float
+  deposit              Float?
   depositPaymentMethod PaymentMethod?
-  dueDate   DateTime
-  status    OrderStatus @default(PENDING)
-  items     OrderItem[]
-  sale      Sale?
-  depositCashMovement CashMovement?
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  dueDate              DateTime
+  status               OrderStatus    @default(PENDING)
+  items                OrderItem[]
+  sale                 Sale?
+  depositCashMovement  CashMovement?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
 
   @@index([branchId])
   @@index([createdByUserId])
@@ -148,11 +144,11 @@ model Order {
 }
 
 model OrderItem {
-  id          Int       @id @default(autoincrement())
+  id          Int        @id @default(autoincrement())
   orderId     Int
-  order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  stockItemId Int
-  stockItem   StockItem @relation(fields: [stockItemId], references: [id])
+  order       Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  stockItemId Int?
+  stockItem   StockItem? @relation(fields: [stockItemId], references: [id], onDelete: SetNull)
   name        String
   units       Int
   unitPrice   Float

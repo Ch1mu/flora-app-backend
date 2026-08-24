@@ -4,7 +4,7 @@ import * as bcrypt from 'bcrypt';
 const prisma = new PrismaClient();
 
 async function main() {
-  const [centro, norte] = await Promise.all([
+  await Promise.all([
     prisma.branch.upsert({
       where: { name: 'Centro' },
       update: {},
@@ -32,12 +32,12 @@ async function main() {
     prisma.stockItem.upsert({
       where: { id: 1 },
       update: {},
-      create: { name: 'Rosas rojas', category: 'Flores', branchId: centro.id, units: 24, price: 1500 },
+      create: { name: 'Rosas rojas', category: 'Flores', units: 24, price: 1500 },
     }),
     prisma.stockItem.upsert({
       where: { id: 2 },
       update: {},
-      create: { name: 'Ramo mixto', category: 'Ramos', branchId: norte.id, units: 12, price: 8500 },
+      create: { name: 'Ramo mixto', category: 'Ramos', units: 12, price: 8500 },
     }),
   ]);
 }

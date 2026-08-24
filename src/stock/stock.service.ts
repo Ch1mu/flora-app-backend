@@ -1,6 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { BranchesService } from '../branches/branches.service';
 import { buildPaginatedResponse, getPagination } from '../common/utils/pagination';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateStockItemDto } from './dto/create-stock-item.dto';
@@ -13,11 +12,9 @@ import { UpdateStockUnitsDto } from './dto/update-stock-units.dto';
 export class StockService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly branchesService: BranchesService,
   ) {}
 
   async create(dto: CreateStockItemDto) {
-    await this.branchesService.ensureExists(dto.branchId);
     const category = await this.resolveCategory(dto.categoryId, dto.category);
     const finalPrice = dto.finalPrice ?? dto.price ?? 0;
     return this.prisma.stockItem.create({
@@ -25,20 +22,17 @@ export class StockService {
         name: dto.name,
         category: category.name,
         categoryId: category.id,
-        branchId: dto.branchId,
         units: dto.units ?? 0,
         costPrice: dto.costPrice,
         finalPrice,
         price: finalPrice,
       },
-      include: { branch: true, categoryRef: true },
+      include: { categoryRef: true },
     });
   }
 
   async findAll(query: QueryStockDto) {
-    const where: Prisma.StockItemWhereInput = {
-      ...(query.branchId ? { branchId: query.branchId } : {}),
-    };
+    const where: Prisma.StockItemWhereInput = {};
     const { page, limit, skip, take } = getPagination(query);
     if (query.search) {
       const searchTokens = tokenizeSearch(query.search);
@@ -55,14 +49,13 @@ export class StockService {
   }
 
   async findOne(id: number) {
-    const item = await this.prisma.stockItem.findUnique({ where: { id }, include: { branch: true, categoryRef: true } });
+    const item = await this.prisma.stockItem.findUnique({ where: { id }, include: { categoryRef: true } });
     if (!item) throw new NotFoundException('Producto de stock no encontrado');
     return item;
   }
 
   async update(id: number, dto: UpdateStockItemDto) {
     await this.findOne(id);
-    if (dto.branchId) await this.branchesService.ensureExists(dto.branchId);
     const category = dto.categoryId || dto.category ? await this.resolveCategory(dto.categoryId, dto.category) : undefined;
     const finalPrice = dto.finalPrice ?? dto.price;
     return this.prisma.stockItem.update({
@@ -71,13 +64,12 @@ export class StockService {
         name: dto.name,
         category: category?.name,
         categoryId: category?.id,
-        branchId: dto.branchId,
         units: dto.units,
         costPrice: dto.costPrice,
         finalPrice,
         price: finalPrice,
       },
-      include: { branch: true, categoryRef: true },
+      include: { categoryRef: true },
     });
   }
 
@@ -103,14 +95,11 @@ export class StockService {
     if (!file) throw new BadRequestException('Debe enviar un archivo PDF en el campo file');
     if (file.mimetype !== 'application/pdf') throw new BadRequestException('El archivo debe ser PDF');
 
-    await this.branchesService.ensureExists(dto.branchId);
     const rows = await this.extractStockRowsFromPdf(file.buffer);
     if (rows.length === 0) throw new BadRequestException('No se encontraron productos para importar');
 
     const dedupedRows = dedupeImportRows(rows);
-    const existingItems = await this.prisma.stockItem.findMany({
-      where: { branchId: dto.branchId },
-    });
+    const existingItems = await this.prisma.stockItem.findMany();
     const categories = await this.ensureImportCategories(dedupedRows.map((row) => row.category));
     const existingByKey = new Map(existingItems.map((item) => [buildImportKey(item.name, item.category), item]));
     let created = 0;
@@ -120,8 +109,8 @@ export class StockService {
       const batch = dedupedRows.slice(index, index + 100);
       await this.prisma.$transaction(
         batch.map((row) => {
-          const costPrice = roundMoney(row.sourcePrice / 2);
-          const finalPrice = roundMoney(costPrice * 2.3);
+          const costPrice = roundMoney(row.sourcePrice);
+          const finalPrice = roundMoney((row.sourcePrice / 2) * 2.3);
           const existing = existingByKey.get(buildImportKey(row.name, row.category));
           const category = categories.get(row.category)!;
 
@@ -129,14 +118,20 @@ export class StockService {
             updated++;
             return this.prisma.stockItem.update({
               where: { id: existing.id },
-              data: { categoryId: category.id, costPrice, finalPrice, price: finalPrice },
+              data: {
+                name: row.name,
+                category: category.name,
+                categoryId: category.id,
+                costPrice,
+                finalPrice,
+                price: finalPrice,
+              },
             });
           }
 
           created++;
           return this.prisma.stockItem.create({
             data: {
-              branchId: dto.branchId,
               name: row.name,
               category: row.category,
               categoryId: category.id,
@@ -154,7 +149,6 @@ export class StockService {
       imported: dedupedRows.length,
       created,
       updated,
-      branchId: dto.branchId,
       priceFormula: 'sourcePrice / 2 * 2.3',
     };
   }
@@ -214,7 +208,7 @@ export class StockService {
         const sourcePrice = parseArgentinePrice(priceText);
 
         if (!category || !name || sourcePrice === null) continue;
-        if (category === 'NOM_GRU' || name === 'DESCRIP') continue;
+        if (name === 'DESCRIP') continue;
         rows.push({ category, name, sourcePrice });
       }
     }
