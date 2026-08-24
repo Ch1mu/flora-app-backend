@@ -55,16 +55,30 @@ export class OrdersService {
       ...(query.status ? { status: query.status } : {}),
     };
     const { page, limit, skip, take } = getPagination(query);
-    const [data, total] = await this.prisma.$transaction([
-      this.prisma.order.findMany({
-        where,
-        include: this.orderInclude,
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take,
-      }),
+    const orderConditions = [Prisma.sql`TRUE`];
+    if (query.branchId) orderConditions.push(Prisma.sql`"branchId" = ${query.branchId}`);
+    if (query.status) orderConditions.push(Prisma.sql`"status" = CAST(${query.status} AS "OrderStatus")`);
+
+    const [orderedIds, total] = await Promise.all([
+      this.prisma.$queryRaw<Array<{ id: number }>>(Prisma.sql`
+        SELECT "id"
+        FROM "Order"
+        WHERE ${Prisma.join(orderConditions, ' AND ')}
+        ORDER BY
+          CASE WHEN "status" = 'PENDING' THEN 0 ELSE 1 END,
+          "dueDate" ASC,
+          "createdAt" DESC
+        LIMIT ${take} OFFSET ${skip}
+      `),
       this.prisma.order.count({ where }),
     ]);
+
+    const orders = await this.prisma.order.findMany({
+      where: { id: { in: orderedIds.map((row) => row.id) } },
+      include: this.orderInclude,
+    });
+    const orderPosition = new Map(orderedIds.map((row, index) => [row.id, index]));
+    const data = orders.sort((a, b) => orderPosition.get(a.id)! - orderPosition.get(b.id)!);
     return buildPaginatedResponse(data, total, page, limit);
   }
 
