@@ -17,7 +17,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:seed": "prisma db seed",
-    "render:build": "npm ci --include=dev && npx prisma migrate deploy && npx prisma generate && npm run build"
+    "render:build": "npm ci --include=dev && npx prisma generate && npm run build"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",
