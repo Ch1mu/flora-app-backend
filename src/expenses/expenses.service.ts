@@ -28,6 +28,7 @@ export class ExpensesService {
     const createdAt = buildDateRange(query.from, query.to);
     const where: Prisma.ExpenseWhereInput = {
       ...(query.branchId ? { branchId: query.branchId } : {}),
+      ...(query.supplierId ? { supplierId: query.supplierId } : {}),
       ...(query.search ? { name: { contains: query.search, mode: 'insensitive' } } : {}),
       ...(query.invoiceType?.trim()
         ? { invoiceType: { equals: query.invoiceType.trim(), mode: 'insensitive' } }

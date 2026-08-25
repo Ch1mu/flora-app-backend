@@ -10,6 +10,12 @@ export class QueryExpensesDto extends PaginationQueryDto {
   branchId?: number;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  supplierId?: number;
+
+  @IsOptional()
   @IsString()
   search?: string;
 
