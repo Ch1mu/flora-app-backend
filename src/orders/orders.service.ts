@@ -59,7 +59,7 @@ export class OrdersService {
     if (query.branchId) orderConditions.push(Prisma.sql`"branchId" = ${query.branchId}`);
     if (query.status) orderConditions.push(Prisma.sql`"status" = CAST(${query.status} AS "OrderStatus")`);
 
-    const [orderedIds, total] = await Promise.all([
+    const [orderedIds, total, pendingCount] = await Promise.all([
       this.prisma.$queryRaw<Array<{ id: number }>>(Prisma.sql`
         SELECT "id"
         FROM "Order"
@@ -71,6 +71,12 @@ export class OrdersService {
         LIMIT ${take} OFFSET ${skip}
       `),
       this.prisma.order.count({ where }),
+      this.prisma.order.count({
+        where: {
+          ...(query.branchId ? { branchId: query.branchId } : {}),
+          status: OrderStatus.PENDING,
+        },
+      }),
     ]);
 
     const orders = await this.prisma.order.findMany({
@@ -79,7 +85,10 @@ export class OrdersService {
     });
     const orderPosition = new Map(orderedIds.map((row, index) => [row.id, index]));
     const data = orders.sort((a, b) => orderPosition.get(a.id)! - orderPosition.get(b.id)!);
-    return buildPaginatedResponse(data, total, page, limit);
+    return {
+      ...buildPaginatedResponse(data, total, page, limit),
+      summary: { pendingCount },
+    };
   }
 
   async findOne(id: number) {

@@ -17,6 +17,7 @@ export class ExpensesService {
 
   async create(dto: CreateExpenseDto, createdByUserId?: number) {
     if (dto.branchId) await this.branchesService.ensureExists(dto.branchId);
+    if (dto.supplierId) await this.ensureSupplier(dto.supplierId);
     return this.prisma.expense.create({
       data: { ...dto, createdByUserId },
       include: this.expenseInclude,
@@ -34,11 +35,15 @@ export class ExpensesService {
       ...(createdAt ? { createdAt } : {}),
     };
     const { page, limit, skip, take } = getPagination(query);
-    const [data, total] = await this.prisma.$transaction([
+    const [data, total, aggregate] = await this.prisma.$transaction([
       this.prisma.expense.findMany({ where, include: this.expenseInclude, orderBy: { createdAt: 'desc' }, skip, take }),
       this.prisma.expense.count({ where }),
+      this.prisma.expense.aggregate({ where, _sum: { amount: true } }),
     ]);
-    return buildPaginatedResponse(data, total, page, limit);
+    return {
+      ...buildPaginatedResponse(data, total, page, limit),
+      summary: { totalAmount: aggregate._sum.amount ?? 0, count: total },
+    };
   }
 
   async findOne(id: number) {
@@ -50,6 +55,7 @@ export class ExpensesService {
   async update(id: number, dto: UpdateExpenseDto) {
     await this.findOne(id);
     if (dto.branchId) await this.branchesService.ensureExists(dto.branchId);
+    if (dto.supplierId) await this.ensureSupplier(dto.supplierId);
     return this.prisma.expense.update({ where: { id }, data: dto, include: this.expenseInclude });
   }
 
@@ -60,6 +66,12 @@ export class ExpensesService {
 
   private readonly expenseInclude = {
     branch: true,
+    supplier: true,
     createdBy: { select: { id: true, name: true, email: true } },
   };
+
+  private async ensureSupplier(id: number) {
+    const supplier = await this.prisma.supplier.findUnique({ where: { id } });
+    if (!supplier) throw new NotFoundException('Proveedor no encontrado');
+  }
 }

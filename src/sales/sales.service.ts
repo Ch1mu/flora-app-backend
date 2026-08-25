@@ -98,7 +98,7 @@ export class SalesService {
       ...(createdAt ? { createdAt } : {}),
     };
     const { page, limit, skip, take } = getPagination(query);
-    const [sales, total] = await this.prisma.$transaction([
+    const [sales, total, aggregate] = await this.prisma.$transaction([
       this.prisma.sale.findMany({
         where,
         include: {
@@ -112,13 +112,12 @@ export class SalesService {
         take,
       }),
       this.prisma.sale.count({ where }),
+      this.prisma.sale.aggregate({ where, _sum: { amount: true } }),
     ]);
-    return buildPaginatedResponse(
-      sales.map((sale) => this.serializeSale(sale)),
-      total,
-      page,
-      limit,
-    );
+    return {
+      ...buildPaginatedResponse(sales.map((sale) => this.serializeSale(sale)), total, page, limit),
+      summary: { totalAmount: aggregate._sum.amount ?? 0, count: total },
+    };
   }
 
   async findOne(id: number) {

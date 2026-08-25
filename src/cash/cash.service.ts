@@ -95,10 +95,29 @@ export class CashService {
   async createClosure(dto: CreateCashClosureDto, createdByUserId?: number) {
     await this.branchesService.ensureExists(dto.branchId);
     const date = this.parseClosureDate(dto.date);
+    const amount = this.calculateClosureAmount(dto);
     return this.prisma.cashClosure.upsert({
       where: { branchId_date: { branchId: dto.branchId, date } },
-      create: { branchId: dto.branchId, createdByUserId, date, amount: dto.amount, notes: dto.notes },
-      update: { amount: dto.amount, notes: dto.notes, createdByUserId },
+      create: {
+        branchId: dto.branchId,
+        createdByUserId,
+        date,
+        controller: dto.controller,
+        debitDiego: dto.debitDiego,
+        debitFlora: dto.debitFlora,
+        cash: dto.cash,
+        amount,
+        notes: dto.notes,
+      },
+      update: {
+        controller: dto.controller,
+        debitDiego: dto.debitDiego,
+        debitFlora: dto.debitFlora,
+        cash: dto.cash,
+        amount,
+        notes: dto.notes,
+        createdByUserId,
+      },
       include: this.cashClosureInclude,
     });
   }
@@ -107,12 +126,20 @@ export class CashService {
     const closure = await this.prisma.cashClosure.findUnique({ where: { id } });
     if (!closure) throw new NotFoundException('Cierre de caja no encontrado');
     if (dto.branchId) await this.branchesService.ensureExists(dto.branchId);
+    const controller = dto.controller ?? closure.controller;
+    const debitDiego = dto.debitDiego ?? closure.debitDiego;
+    const debitFlora = dto.debitFlora ?? closure.debitFlora;
+    const cash = dto.cash ?? closure.cash;
     return this.prisma.cashClosure.update({
       where: { id },
       data: {
         branchId: dto.branchId,
         date: dto.date ? this.parseClosureDate(dto.date) : undefined,
-        amount: dto.amount,
+        controller,
+        debitDiego,
+        debitFlora,
+        cash,
+        amount: controller + debitDiego + debitFlora + cash,
         notes: dto.notes,
       },
       include: this.cashClosureInclude,
@@ -129,6 +156,10 @@ export class CashService {
     const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
     if (!dateOnly) return new Date(value);
     return new Date(Date.UTC(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]), 3, 0, 0, 0));
+  }
+
+  private calculateClosureAmount(dto: CreateCashClosureDto) {
+    return dto.controller + dto.debitDiego + dto.debitFlora + dto.cash;
   }
 
   private readonly cashMovementInclude = {

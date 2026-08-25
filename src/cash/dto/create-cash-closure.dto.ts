@@ -13,7 +13,22 @@ export class CreateCashClosureDto {
   @Type(() => Number)
   @IsNumber()
   @Min(0)
-  amount: number;
+  controller: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  debitDiego: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  debitFlora: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  cash: number;
 
   @IsOptional()
   @IsString()
