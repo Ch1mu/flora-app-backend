@@ -110,7 +110,7 @@ export class StockService {
       await this.prisma.$transaction(
         batch.map((row) => {
           const costPrice = roundMoney(row.sourcePrice);
-          const finalPrice = roundMoney((row.sourcePrice / 2) * 2.55);
+          const finalPrice = roundMoney((row.sourcePrice / 2) * 2.58);
           const existing = existingByKey.get(buildImportKey(row.name, row.category));
           const category = categories.get(row.category)!;
 
@@ -149,7 +149,7 @@ export class StockService {
       imported: dedupedRows.length,
       created,
       updated,
-      priceFormula: 'sourcePrice / 2 * 2.55',
+      priceFormula: 'sourcePrice / 2 * 2.58',
     };
   }
 
