@@ -32,7 +32,9 @@ export class StockService {
   }
 
   async findAll(query: QueryStockDto) {
-    const where: Prisma.StockItemWhereInput = {};
+    const where: Prisma.StockItemWhereInput = {
+      ...(query.categoryId ? { categoryId: query.categoryId } : {}),
+    };
     const { page, limit, skip, take } = getPagination(query);
     if (query.search) {
       const searchTokens = tokenizeSearch(query.search);

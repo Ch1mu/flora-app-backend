@@ -10,6 +10,12 @@ export class QueryStockDto extends PaginationQueryDto {
   branchId?: number;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  categoryId?: number;
+
+  @IsOptional()
   @IsString()
   search?: string;
 }
