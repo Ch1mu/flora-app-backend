@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsDateString, IsInt, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsDateString, IsIn, IsInt, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 
 export class CreateExpenseDto {
   @IsOptional()
@@ -24,6 +24,10 @@ export class CreateExpenseDto {
   @IsOptional()
   @IsString()
   invoiceType?: string;
+
+  @IsOptional()
+  @IsIn(['Efectivo', 'Transferencia Flora', 'Transferencia Florencia'])
+  paymentMethod?: string;
 
   @IsOptional()
   @IsDateString()

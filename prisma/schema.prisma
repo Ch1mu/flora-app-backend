@@ -177,6 +177,7 @@ model Expense {
   name            String
   description     String?
   invoiceType     String?
+  paymentMethod   String?
   amount          Float
   date            DateTime  @default(now())
   createdAt       DateTime  @default(now())
