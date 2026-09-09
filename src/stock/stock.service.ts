@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import ExcelJS from 'exceljs';
 import { buildPaginatedResponse, getPagination } from '../common/utils/pagination';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateStockItemDto } from './dto/create-stock-item.dto';
@@ -100,6 +101,26 @@ export class StockService {
     const rows = await this.extractStockRowsFromPdf(file.buffer);
     if (rows.length === 0) throw new BadRequestException('No se encontraron productos para importar');
 
+    return this.importStockRows(rows, (sourcePrice) => (sourcePrice / 2) * 2.58, 'sourcePrice / 2 * 2.58', 'pdf');
+  }
+
+  async importExcel(file: Express.Multer.File | undefined) {
+    if (!file) throw new BadRequestException('Debe enviar un archivo Excel en el campo file');
+    if (!isExcelFile(file)) throw new BadRequestException('El archivo debe ser un Excel .xlsx');
+
+    const rows = await this.extractStockRowsFromExcel(file.buffer);
+    if (rows.length === 0) throw new BadRequestException('No se encontraron productos para importar');
+
+    return this.importStockRows(rows, (sourcePrice) => sourcePrice * 2.58, 'sourcePrice * 2.58', 'excel');
+  }
+
+  private async importStockRows(
+    rows: Array<{ category: string; name: string; sourcePrice: number }>,
+    calculateFinalPrice: (sourcePrice: number) => number,
+    priceFormula: string,
+    source: 'pdf' | 'excel',
+  ) {
+
     const dedupedRows = dedupeImportRows(rows);
     const existingItems = await this.prisma.stockItem.findMany();
     const categories = await this.ensureImportCategories(dedupedRows.map((row) => row.category));
@@ -112,7 +133,7 @@ export class StockService {
       await this.prisma.$transaction(
         batch.map((row) => {
           const costPrice = roundMoney(row.sourcePrice);
-          const finalPrice = roundMoney((row.sourcePrice / 2) * 2.58);
+          const finalPrice = roundMoney(calculateFinalPrice(row.sourcePrice));
           const existing = existingByKey.get(buildImportKey(row.name, row.category));
           const category = categories.get(row.category)!;
 
@@ -151,8 +172,51 @@ export class StockService {
       imported: dedupedRows.length,
       created,
       updated,
-      priceFormula: 'sourcePrice / 2 * 2.58',
+      source,
+      priceFormula,
     };
+  }
+
+  private async extractStockRowsFromExcel(buffer: Uint8Array) {
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer as any);
+    const rows: Array<{ category: string; name: string; sourcePrice: number }> = [];
+
+    workbook.eachSheet((worksheet) => {
+      let headerRowNumber: number | undefined;
+      let categoryColumn = 0;
+      let nameColumn = 0;
+      let priceColumn = 0;
+
+      worksheet.eachRow((row, rowNumber) => {
+        if (headerRowNumber !== undefined) return;
+        const columns = new Map<string, number>();
+        row.eachCell({ includeEmpty: true }, (cell, columnNumber) => {
+          const header = normalizeHeader(cell.value);
+          if (header) columns.set(header, columnNumber);
+        });
+
+        if (columns.has('NOM_FAM') && columns.has('DESCRIP') && columns.has('PRECIO')) {
+          headerRowNumber = rowNumber;
+          categoryColumn = columns.get('NOM_FAM')!;
+          nameColumn = columns.get('DESCRIP')!;
+          priceColumn = columns.get('PRECIO')!;
+        }
+      });
+
+      if (headerRowNumber === undefined) return;
+
+      worksheet.eachRow((row, rowNumber) => {
+        if (rowNumber <= headerRowNumber!) return;
+        const category = cellText(row.getCell(categoryColumn).value);
+        const name = cellText(row.getCell(nameColumn).value);
+        const sourcePrice = parseSpreadsheetPrice(row.getCell(priceColumn).value);
+        if (!category || !name || sourcePrice === null) return;
+        rows.push({ category, name, sourcePrice });
+      });
+    });
+
+    return rows;
   }
 
   private async resolveCategory(categoryId?: number, categoryName?: string) {
@@ -239,6 +303,41 @@ function parseArgentinePrice(value: string) {
   if (!/^\d+(\.\d+)?$/.test(normalized)) return null;
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function isExcelFile(file: Express.Multer.File) {
+  return file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    || file.mimetype === 'application/octet-stream'
+    || /\.xlsx$/i.test(file.originalname ?? '');
+}
+
+function normalizeHeader(value: unknown) {
+  return cellText(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/\s+/g, '');
+}
+
+function cellText(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'object') {
+    const cell = value as { text?: unknown; result?: unknown; richText?: Array<{ text?: unknown }> };
+    if (cell.result !== undefined) return cellText(cell.result);
+    if (cell.text !== undefined) return String(cell.text).trim();
+    if (cell.richText) return cell.richText.map((part) => String(part.text ?? '')).join('').trim();
+    return '';
+  }
+  return String(value).trim();
+}
+
+function parseSpreadsheetPrice(value: unknown) {
+  if (typeof value === 'number') return Number.isFinite(value) && value >= 0 ? value : null;
+  const text = cellText(value).replace(/\s/g, '').replace(/\$/g, '');
+  if (!text) return null;
+  const normalized = text.includes(',') ? text.replace(/\./g, '').replace(',', '.') : text;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
 function roundMoney(value: number) {

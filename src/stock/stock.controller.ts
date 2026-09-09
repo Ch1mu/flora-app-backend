@@ -27,6 +27,12 @@ export class StockController {
     return this.stockService.importPdf(file, dto);
   }
 
+  @Post('import-excel')
+  @UseInterceptors(FileInterceptor('file'))
+  importExcel(@UploadedFile() file: Express.Multer.File) {
+    return this.stockService.importExcel(file);
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.stockService.findOne(id);
