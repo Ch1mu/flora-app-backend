@@ -19,13 +19,17 @@ export class ExpensesService {
     if (dto.branchId) await this.branchesService.ensureExists(dto.branchId);
     if (dto.supplierId) await this.ensureSupplier(dto.supplierId);
     return this.prisma.expense.create({
-      data: { ...dto, createdByUserId },
+      data: {
+        ...dto,
+        date: dto.date ? new Date(dto.date) : undefined,
+        createdByUserId,
+      },
       include: this.expenseInclude,
     });
   }
 
   async findAll(query: QueryExpensesDto) {
-    const createdAt = buildDateRange(query.from, query.to);
+    const date = buildDateRange(query.from, query.to);
     const where: Prisma.ExpenseWhereInput = {
       ...(query.branchId ? { branchId: query.branchId } : {}),
       ...(query.supplierId ? { supplierId: query.supplierId } : {}),
@@ -33,11 +37,11 @@ export class ExpensesService {
       ...(query.invoiceType?.trim()
         ? { invoiceType: { equals: query.invoiceType.trim(), mode: 'insensitive' } }
         : {}),
-      ...(createdAt ? { createdAt } : {}),
+      ...(date ? { date } : {}),
     };
     const { page, limit, skip, take } = getPagination(query);
     const [data, total, aggregate] = await this.prisma.$transaction([
-      this.prisma.expense.findMany({ where, include: this.expenseInclude, orderBy: { createdAt: 'desc' }, skip, take }),
+      this.prisma.expense.findMany({ where, include: this.expenseInclude, orderBy: { date: 'desc' }, skip, take }),
       this.prisma.expense.count({ where }),
       this.prisma.expense.aggregate({ where, _sum: { amount: true } }),
     ]);
@@ -57,7 +61,14 @@ export class ExpensesService {
     await this.findOne(id);
     if (dto.branchId) await this.branchesService.ensureExists(dto.branchId);
     if (dto.supplierId) await this.ensureSupplier(dto.supplierId);
-    return this.prisma.expense.update({ where: { id }, data: dto, include: this.expenseInclude });
+    return this.prisma.expense.update({
+      where: { id },
+      data: {
+        ...dto,
+        date: dto.date ? new Date(dto.date) : undefined,
+      },
+      include: this.expenseInclude,
+    });
   }
 
   async remove(id: number) {

@@ -105,6 +105,7 @@ export class CashService {
         controller: dto.controller,
         debitDiego: dto.debitDiego,
         debitFlora: dto.debitFlora,
+        transferDiego: dto.transferDiego ?? 0,
         cash: dto.cash,
         amount,
         notes: dto.notes,
@@ -113,6 +114,7 @@ export class CashService {
         controller: dto.controller,
         debitDiego: dto.debitDiego,
         debitFlora: dto.debitFlora,
+        transferDiego: dto.transferDiego ?? 0,
         cash: dto.cash,
         amount,
         notes: dto.notes,
@@ -129,6 +131,7 @@ export class CashService {
     const controller = dto.controller ?? closure.controller;
     const debitDiego = dto.debitDiego ?? closure.debitDiego;
     const debitFlora = dto.debitFlora ?? closure.debitFlora;
+    const transferDiego = dto.transferDiego ?? closure.transferDiego;
     const cash = dto.cash ?? closure.cash;
     return this.prisma.cashClosure.update({
       where: { id },
@@ -138,8 +141,9 @@ export class CashService {
         controller,
         debitDiego,
         debitFlora,
+        transferDiego,
         cash,
-        amount: controller + debitDiego + debitFlora + cash,
+        amount: controller + debitDiego + debitFlora + transferDiego + cash,
         notes: dto.notes,
       },
       include: this.cashClosureInclude,
@@ -159,7 +163,7 @@ export class CashService {
   }
 
   private calculateClosureAmount(dto: CreateCashClosureDto) {
-    return dto.controller + dto.debitDiego + dto.debitFlora + dto.cash;
+    return dto.controller + dto.debitDiego + dto.debitFlora + (dto.transferDiego ?? 0) + dto.cash;
   }
 
   private readonly cashMovementInclude = {

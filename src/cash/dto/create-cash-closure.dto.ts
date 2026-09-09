@@ -26,6 +26,12 @@ export class CreateCashClosureDto {
   debitFlora: number;
 
   @Type(() => Number)
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  transferDiego?: number;
+
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   cash: number;

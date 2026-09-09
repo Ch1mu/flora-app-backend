@@ -178,12 +178,14 @@ model Expense {
   description     String?
   invoiceType     String?
   amount          Float
+  date            DateTime  @default(now())
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   @@index([branchId])
   @@index([supplierId])
   @@index([createdByUserId])
+  @@index([date])
   @@index([createdAt])
 }
 
@@ -223,6 +225,7 @@ model CashClosure {
   controller      Float    @default(0)
   debitDiego      Float    @default(0)
   debitFlora      Float    @default(0)
+  transferDiego   Float    @default(0)
   cash            Float    @default(0)
   amount          Float
   notes           String?
