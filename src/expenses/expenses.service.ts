@@ -1,7 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { BranchesService } from '../branches/branches.service';
-import { buildDateRange } from '../common/utils/date-range';
 import { buildPaginatedResponse, getPagination } from '../common/utils/pagination';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateExpenseDto } from './dto/create-expense.dto';
@@ -29,7 +28,7 @@ export class ExpensesService {
   }
 
   async findAll(query: QueryExpensesDto) {
-    const date = buildDateRange(query.from, query.to);
+    const date = buildExpenseDateRange(query.from, query.to);
     const where: Prisma.ExpenseWhereInput = {
       ...(query.branchId ? { branchId: query.branchId } : {}),
       ...(query.supplierId ? { supplierId: query.supplierId } : {}),
@@ -86,4 +85,30 @@ export class ExpensesService {
     const supplier = await this.prisma.supplier.findUnique({ where: { id } });
     if (!supplier) throw new NotFoundException('Proveedor no encontrado');
   }
+}
+
+function buildExpenseDateRange(from?: string, to?: string) {
+  if (!from && !to) return undefined;
+
+  return {
+    ...(from ? { gte: parseExpenseDate(from, false) } : {}),
+    ...(to ? { lte: parseExpenseDate(to, true) } : {}),
+  };
+}
+
+function parseExpenseDate(value: string, endOfDay: boolean) {
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!dateOnly) return new Date(value);
+
+  return new Date(
+    Date.UTC(
+      Number(dateOnly[1]),
+      Number(dateOnly[2]) - 1,
+      Number(dateOnly[3]),
+      endOfDay ? 23 : 0,
+      endOfDay ? 59 : 0,
+      endOfDay ? 59 : 0,
+      endOfDay ? 999 : 0,
+    ),
+  );
 }
