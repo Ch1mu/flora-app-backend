@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsInt, Min } from 'class-validator';
+import { IsInt, IsNumber, IsOptional, Min } from 'class-validator';
 
 export class CreateOrderItemDto {
   @Type(() => Number)
@@ -11,4 +11,10 @@ export class CreateOrderItemDto {
   @IsInt()
   @Min(1)
   units: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  unitPrice?: number;
 }

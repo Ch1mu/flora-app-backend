@@ -55,12 +55,13 @@ export class SalesService {
           items: {
             create: dto.items.map((item) => {
               const stockItem = stockItems.find((stock) => stock.id === item.stockItemId)!;
+              const unitPrice = item.unitPrice ?? stockItem.finalPrice ?? stockItem.price;
               return {
                 stockItemId: stockItem.id,
                 name: stockItem.name,
                 units: item.units,
-                unitPrice: stockItem.finalPrice ?? stockItem.price,
-                subtotal: (stockItem.finalPrice ?? stockItem.price) * item.units,
+                unitPrice,
+                subtotal: unitPrice * item.units,
               };
             }),
           },
@@ -166,14 +167,15 @@ export class SalesService {
 
         for (const item of dto.items) {
           const stockItem = stockItems.find((stock) => stock.id === item.stockItemId)!;
+          const unitPrice = item.unitPrice ?? stockItem.finalPrice ?? stockItem.price;
           await tx.saleItem.create({
             data: {
               saleId: id,
               stockItemId: stockItem.id,
               name: stockItem.name,
               units: item.units,
-              unitPrice: stockItem.finalPrice ?? stockItem.price,
-              subtotal: (stockItem.finalPrice ?? stockItem.price) * item.units,
+              unitPrice,
+              subtotal: unitPrice * item.units,
             },
           });
         }
