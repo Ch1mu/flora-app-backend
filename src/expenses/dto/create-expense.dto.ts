@@ -26,7 +26,7 @@ export class CreateExpenseDto {
   invoiceType?: string;
 
   @IsOptional()
-  @IsIn(['Efectivo', 'Transferencia Flora', 'Transferencia Florencia'])
+  @IsIn(['Efectivo', 'Transferencia Flora', 'Transferencia Florencia', 'Transferencia Diego'])
   paymentMethod?: string;
 
   @IsOptional()
