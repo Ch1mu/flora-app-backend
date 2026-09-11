@@ -24,6 +24,7 @@ export class StockService {
         category: category.name,
         categoryId: category.id,
         units: dto.units ?? 0,
+        priority: dto.priority,
         costPrice: dto.costPrice,
         finalPrice,
         price: finalPrice,
@@ -39,13 +40,23 @@ export class StockService {
     const { page, limit, skip, take } = getPagination(query);
     if (query.search) {
       const searchTokens = tokenizeSearch(query.search);
-      const items = await this.prisma.stockItem.findMany({ where, include: { categoryRef: true }, orderBy: { name: 'asc' } });
+      const items = await this.prisma.stockItem.findMany({
+        where,
+        include: { categoryRef: true },
+        orderBy: [{ priority: 'asc' }, { name: 'asc' }],
+      });
       const data = items.filter((item) => matchesSearchTokens(item.name, searchTokens));
       return buildPaginatedResponse(data.slice(skip, skip + take), data.length, page, limit);
     }
 
     const [data, total] = await this.prisma.$transaction([
-      this.prisma.stockItem.findMany({ where, include: { categoryRef: true }, orderBy: { name: 'asc' }, skip, take }),
+      this.prisma.stockItem.findMany({
+        where,
+        include: { categoryRef: true },
+        orderBy: [{ priority: 'asc' }, { name: 'asc' }],
+        skip,
+        take,
+      }),
       this.prisma.stockItem.count({ where }),
     ]);
     return buildPaginatedResponse(data, total, page, limit);
@@ -68,6 +79,7 @@ export class StockService {
         category: category?.name,
         categoryId: category?.id,
         units: dto.units,
+        priority: dto.priority,
         costPrice: dto.costPrice,
         finalPrice,
         price: finalPrice,

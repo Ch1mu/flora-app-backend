@@ -34,6 +34,12 @@ export class CreateStockItemDto {
 
   @IsOptional()
   @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  priority?: number;
+
+  @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   price?: number;
