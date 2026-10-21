@@ -40,20 +40,40 @@ export class StockService {
     const { page, limit, skip, take } = getPagination(query);
     if (query.search) {
       const searchTokens = tokenizeSearch(query.search);
+      const conditions = [Prisma.sql`TRUE`];
+      if (query.categoryId) conditions.push(Prisma.sql`"categoryId" = ${query.categoryId}`);
+      // Match the existing JS normalization in Postgres before transferring rows.
+      const normalizedName = Prisma.sql`regexp_replace(
+        lower(regexp_replace(normalize("name", NFD), U&'[\\0300-\\036f]', '', 'g')),
+        '[^a-z0-9]+', ' ', 'g'
+      )`;
+      for (const token of searchTokens) {
+        conditions.push(Prisma.sql`strpos(${normalizedName}, ${token}) > 0`);
+      }
+      const filter = Prisma.join(conditions, ' AND ');
+      const [ids, counts] = await this.prisma.$transaction([
+        this.prisma.$queryRaw<Array<{ id: number }>>(Prisma.sql`
+          SELECT "id" FROM "StockItem" WHERE ${filter}
+          ORDER BY "priority" ASC, "name" ASC, "id" ASC
+          LIMIT ${take} OFFSET ${skip}
+        `),
+        this.prisma.$queryRaw<Array<{ total: bigint }>>(Prisma.sql`
+          SELECT COUNT(*) AS total FROM "StockItem" WHERE ${filter}
+        `),
+      ]);
       const items = await this.prisma.stockItem.findMany({
-        where,
+        where: { id: { in: ids.map((item) => item.id) } },
         include: { categoryRef: true },
-        orderBy: [{ priority: 'asc' }, { name: 'asc' }],
+        orderBy: [{ priority: 'asc' }, { name: 'asc' }, { id: 'asc' }],
       });
-      const data = items.filter((item) => matchesSearchTokens(item.name, searchTokens));
-      return buildPaginatedResponse(data.slice(skip, skip + take), data.length, page, limit);
+      return buildPaginatedResponse(items, Number(counts[0].total), page, limit);
     }
 
     const [data, total] = await this.prisma.$transaction([
       this.prisma.stockItem.findMany({
         where,
         include: { categoryRef: true },
-        orderBy: [{ priority: 'asc' }, { name: 'asc' }],
+        orderBy: [{ priority: 'asc' }, { name: 'asc' }, { id: 'asc' }],
         skip,
         take,
       }),
@@ -134,7 +154,9 @@ export class StockService {
   ) {
 
     const dedupedRows = dedupeImportRows(rows);
-    const existingItems = await this.prisma.stockItem.findMany();
+    const existingItems = await this.prisma.stockItem.findMany({
+      select: { id: true, name: true, category: true },
+    });
     const categories = await this.ensureImportCategories(dedupedRows.map((row) => row.category));
     const existingByKey = new Map(existingItems.map((item) => [buildImportKey(item.name, item.category), item]));
     let created = 0;
@@ -153,6 +175,7 @@ export class StockService {
             updated++;
             return this.prisma.stockItem.update({
               where: { id: existing.id },
+              select: { id: true },
               data: {
                 name: row.name,
                 category: category.name,
@@ -166,6 +189,7 @@ export class StockService {
 
           created++;
           return this.prisma.stockItem.create({
+            select: { id: true },
             data: {
               name: row.name,
               category: row.category,
@@ -370,11 +394,6 @@ function buildImportKey(name: string, category: string) {
 
 function normalizeImportValue(value: string) {
   return value.trim().replace(/\s+/g, ' ').toLowerCase();
-}
-
-function matchesSearchTokens(value: string, tokens: string[]) {
-  const normalized = normalizeSearchValue(value);
-  return tokens.every((token) => normalized.includes(token));
 }
 
 function tokenizeSearch(value: string) {

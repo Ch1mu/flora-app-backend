@@ -52,14 +52,21 @@ export class ReportsService {
 
   async salesByCategory(query: QueryReportsDto) {
     const saleWhere = this.buildSaleWhere(query);
-    const items = await this.prisma.saleItem.findMany({
+    const items = await this.prisma.saleItem.groupBy({
+      by: ['stockItemId'],
       where: { sale: saleWhere },
-      include: {
-        stockItem: {
-          include: { categoryRef: true },
-        },
+      _sum: { subtotal: true, units: true },
+    });
+    const products = await this.prisma.stockItem.findMany({
+      where: { id: { in: items.flatMap((item) => item.stockItemId === null ? [] : [item.stockItemId]) } },
+      select: {
+        id: true,
+        categoryId: true,
+        category: true,
+        categoryRef: { select: { name: true } },
       },
     });
+    const productById = new Map(products.map((product) => [product.id, product]));
 
     const byCategory = new Map<
       string,
@@ -67,12 +74,13 @@ export class ReportsService {
     >();
 
     for (const item of items) {
-      const categoryId = item.stockItem?.categoryId ?? null;
-      const category = item.stockItem?.categoryRef?.name ?? item.stockItem?.category ?? 'Sin categoria';
+      const stockItem = item.stockItemId === null ? undefined : productById.get(item.stockItemId);
+      const categoryId = stockItem?.categoryId ?? null;
+      const category = stockItem?.categoryRef?.name ?? stockItem?.category ?? 'Sin categoria';
       const key = categoryId ? `id:${categoryId}` : `name:${category}`;
       const current = byCategory.get(key) ?? { categoryId, category, total: 0, units: 0 };
-      current.total += item.subtotal;
-      current.units += item.units;
+      current.total += item._sum.subtotal ?? 0;
+      current.units += item._sum.units ?? 0;
       byCategory.set(key, current);
     }
 
