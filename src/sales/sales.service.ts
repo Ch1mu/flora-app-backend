@@ -51,6 +51,7 @@ export class SalesService {
           customer: dto.customer?.trim() || 'Consumidor final',
           amount: dto.amount,
           paymentMethod,
+          date: parseSaleDate(dto.date),
           sourceOrderId: dto.sourceOrderId,
           items: {
             create: dto.items.map((item) => {
@@ -85,6 +86,7 @@ export class SalesService {
         cashAmount,
         paymentMethod,
         dto.sourceOrderId,
+        sale.date,
       );
 
       return this.serializeSale(sale);
@@ -92,11 +94,11 @@ export class SalesService {
   }
 
   async findAll(query: QuerySalesDto) {
-    const createdAt = buildDateRange(query.from, query.to);
+    const date = buildDateRange(query.from, query.to);
     const where: Prisma.SaleWhereInput = {
       branchId: query.branchId,
       ...(query.paymentMethod ? { paymentMethod: toPrismaPaymentMethod(query.paymentMethod) } : {}),
-      ...(createdAt ? { createdAt } : {}),
+      ...(date ? { date } : {}),
     };
     const { page, limit, skip, take } = getPagination(query);
     const [sales, total, aggregate] = await this.prisma.$transaction([
@@ -108,7 +110,7 @@ export class SalesService {
           sourceOrder: true,
           createdBy: { select: { id: true, name: true, email: true } },
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
         skip,
         take,
       }),
@@ -188,6 +190,7 @@ export class SalesService {
           customer: dto.customer !== undefined ? dto.customer.trim() || 'Consumidor final' : undefined,
           amount: dto.amount,
           paymentMethod: dto.paymentMethod ? toPrismaPaymentMethod(dto.paymentMethod) : undefined,
+          date: dto.date ? parseSaleDate(dto.date) : undefined,
         },
         include: {
           items: true,
@@ -212,6 +215,7 @@ export class SalesService {
         cashAmount,
         updated.paymentMethod,
         updated.sourceOrderId ?? undefined,
+        updated.date,
       );
 
       return this.serializeSale(updated);
@@ -240,6 +244,7 @@ export class SalesService {
     amount: number,
     paymentMethod: PaymentMethod,
     sourceOrderId?: number,
+    occurredAt?: Date,
   ) {
     if (amount <= 0) {
       await tx.cashMovement.deleteMany({ where: { saleId } });
@@ -256,12 +261,14 @@ export class SalesService {
         description: sourceOrderId ? `Saldo pedido #${sourceOrderId}` : `Venta #${saleId}`,
         amount,
         paymentMethod,
+        occurredAt,
         saleId,
       },
       update: {
         branchId,
         amount,
         paymentMethod,
+        occurredAt,
         description: sourceOrderId ? `Saldo pedido #${sourceOrderId}` : `Venta #${saleId}`,
       },
     });
@@ -270,4 +277,22 @@ export class SalesService {
   private serializeSale<T extends { paymentMethod: any }>(sale: T) {
     return { ...sale, paymentMethod: fromPrismaPaymentMethod(sale.paymentMethod) };
   }
+}
+
+function parseSaleDate(value?: string) {
+  const dateValue = value ?? getArgentinaDateKey();
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateValue);
+  if (!dateOnly) return new Date(dateValue);
+  return new Date(Date.UTC(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]), 3, 0, 0, 0));
+}
+
+function getArgentinaDateKey() {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
 }

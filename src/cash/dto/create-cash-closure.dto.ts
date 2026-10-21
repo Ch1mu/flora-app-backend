@@ -32,6 +32,12 @@ export class CreateCashClosureDto {
   transferDiego?: number;
 
   @Type(() => Number)
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  transferFlorencia?: number;
+
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   cash: number;

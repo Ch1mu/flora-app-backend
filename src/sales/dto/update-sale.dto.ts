@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsIn, IsInt, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { IsArray, IsDateString, IsIn, IsInt, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
 import { paymentMethodValues } from '../../common/payment-method';
 import { CreateSaleItemDto } from './create-sale-item.dto';
 
@@ -23,6 +23,10 @@ export class UpdateSaleDto {
   @IsOptional()
   @IsIn(paymentMethodValues)
   paymentMethod?: string;
+
+  @IsOptional()
+  @IsDateString()
+  date?: string;
 
   @IsOptional()
   @IsArray()

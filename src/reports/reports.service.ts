@@ -89,7 +89,7 @@ export class ReportsService {
     return {
       ...(query.branchId ? { branchId: query.branchId } : {}),
       ...(query.paymentMethod ? { paymentMethod: toPrismaPaymentMethod(query.paymentMethod) } : {}),
-      ...(buildDateRange(query.from, query.to) ? { createdAt: buildDateRange(query.from, query.to) } : {}),
+      ...(buildDateRange(query.from, query.to) ? { date: buildDateRange(query.from, query.to) } : {}),
     };
   }
 }

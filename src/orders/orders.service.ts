@@ -201,6 +201,7 @@ export class OrdersService {
         customer: dto.customer || order.customer,
         amount: finalAmount,
         paymentMethod: dto.paymentMethod,
+        date: dto.date,
         sourceOrderId: order.id,
         items: finalItems,
       },

@@ -98,6 +98,7 @@ model Sale {
   customer        String        @default("Consumidor final")
   amount          Float
   paymentMethod   PaymentMethod
+  date            DateTime      @default(now())
   items           SaleItem[]
   sourceOrderId   Int?          @unique
   sourceOrder     Order?        @relation(fields: [sourceOrderId], references: [id])
@@ -108,6 +109,7 @@ model Sale {
   @@index([branchId])
   @@index([createdByUserId])
   @@index([paymentMethod])
+  @@index([date])
   @@index([createdAt])
 }
 
@@ -228,6 +230,7 @@ model CashClosure {
   debitDiego      Float    @default(0)
   debitFlora      Float    @default(0)
   transferDiego   Float    @default(0)
+  transferFlorencia Float  @default(0)
   cash            Float    @default(0)
   amount          Float
   notes           String?
